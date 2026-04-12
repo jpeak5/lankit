@@ -1,6 +1,6 @@
 # lankit
 
-lankit is a configuration toolkit for the MikroTik hAP ax³ that generates RouterOS scripts and provisions Pi-hole + Unbound from a single YAML file. It's for people who write code or run home labs, understand what VLANs are supposed to do, and have found raw RouterOS too arcane to configure reliably. Declare your segments and permissions in `network.yml`; lankit handles the translation into router commands, DNS configuration, and firewall rules — with rollback before every change. It is not a GUI, it does not support other router brands, and it does not manage your network for you.
+lankit is a configuration toolkit for the MikroTik hAP ax³ that generates RouterOS scripts and provisions Pi-hole + Unbound from a single YAML file. It's for people who write code or run home labs, understand what VLANs are supposed to do, and have found raw RouterOS too arcane to configure reliably. Declare your segments and permissions in `network.yml`; lankit handles the translation into router commands, DNS configuration, and firewall rules — with rollback before every change. It is not a GUI, it does not support other router brands, and it requires you to make decisions: lankit executes them, it does not make them for you.
 
 ## What it does
 
@@ -8,38 +8,58 @@ lankit is a configuration toolkit for the MikroTik hAP ax³ that generates Route
   with per-segment DNS filtering, internet access rules, client isolation,
   and bandwidth limits
 - **DNS** — Pi-hole (ad blocking, query logging) backed by Unbound (full
-  recursive resolution, DNSSEC) in a single-interface design that requires
-  no changes when VLANs are added
+  recursive resolution, DNSSEC). Adding a new VLAN requires no DNS
+  reconfiguration.
 - **Safety** — every `lankit apply` snapshots the router config first;
-  `lankit rollback` restores it. A printable rollback card covers the
-  no-laptop scenario.
-- **CLI** — `lankit discover`, `lankit extend`, `lankit rules`, `lankit diagram`,
-  and more
+  `lankit rollback` restores it. If you push a bad config and lose WiFi,
+  you can't reach the router from your laptop — the printable rollback card
+  covers that scenario with step-by-step recovery instructions.
 
 ## Requirements
 
 - Python 3.11+
-- MikroTik router (tested on hAP ax³) with SSH access
-- Raspberry Pi running Raspberry Pi OS (for Pi-hole + Unbound)
-- `pip install -e .` (see below)
-- Ansible (for `lankit provision`)
+- MikroTik router (tested on hAP ax³) with SSH access enabled
+- Raspberry Pi running Raspberry Pi OS, connected to the router via ethernet
+  (hosts Pi-hole + Unbound; required for `lankit provision`)
 - graphviz system package (optional, for `lankit diagram`)
+
+Ansible is installed automatically as part of `pip install -e .`.
 
 ## Install
 
 ```bash
-git clone <this repo>
-cd kit
+git clone https://github.com/jpeak5/lankit.git
+cd lankit
 pip install -e .
-lankit --help      # verify install
+
+# Verify:
+lankit --version
+```
+
+If `lankit` is not found after install, your `~/.local/bin` may not be in PATH:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"   # add to ~/.bashrc or ~/.zshrc to persist
 ```
 
 ## Quick start
 
-```bash
-cp network.yml my-network.yml      # or: lankit discover --new
-# edit my-network.yml — fill in all CHOOSE fields
+### Option A — Guided setup (recommended for first-time users)
 
+```bash
+lankit discover --new    # walks you through creating network.yml (~10 minutes)
+```
+
+### Option B — Edit the template directly
+
+```bash
+cp network.yml my-network.yml
+# open my-network.yml and fill in all CHOOSE fields
+```
+
+Then:
+
+```bash
 lankit overview                    # verify config parsed correctly
 lankit generate                    # render RouterOS scripts
 lankit diagram --view              # visual sanity check
@@ -48,8 +68,6 @@ lankit apply --dry-run             # confirm SSH works
 lankit apply                       # push to router
 lankit provision                   # set up Pi-hole + Unbound
 ```
-
-See `TESTING.md` for the full phased testing progression.
 
 ## Commands
 
@@ -76,7 +94,7 @@ See `DESIGN.md` for the full architecture, philosophy, and design decisions.
 ## File structure
 
 ```
-kit/
+lankit/
 ├── network.yml              # your network declaration (edit this)
 ├── network.schema.json      # JSON Schema for validation
 ├── lankit/
