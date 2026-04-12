@@ -1,0 +1,167 @@
+---
+# dns-server role — installs and configures Pi-hole + Unbound
+# All configuration is driven by lankit variables (no hardcoded values).
+
+# ── Bootstrap: ensure Python is available for subsequent Ansible modules ─────
+# Uses 'raw' (no Python required) so this works on a bare OS image.
+
+- name: Bootstrap Python
+  raw: apt-get install -y python3
+  changed_when: false
+
+# ── Identity ──────────────────────────────────────────────────────────────────
+# Ensure the lankit SSH key is authorised — idempotent, handles key rotation.
+
+- name: Install lankit SSH public key
+  authorized_key:
+    user: "{{ ansible_user }}"
+    key: "{{ lankit_ssh_public_key }}"
+    state: present
+
+# ── Unbound ──────────────────────────────────────────────────────────────────
+
+- name: Install Unbound
+  apt:
+    name: unbound
+    state: present
+    update_cache: yes
+
+- name: Remove legacy pi-hole.conf (superseded by lankit.conf)
+  file:
+    path: /etc/unbound/unbound.conf.d/pi-hole.conf
+    state: absent
+  notify: restart unbound
+
+- name: Deploy Unbound config
+  template:
+    src: unbound.conf.j2
+    dest: /etc/unbound/unbound.conf.d/lankit.conf
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    dnssec: "{{ lankit_dnssec }}"
+  notify: restart unbound
+
+- name: Download root hints for full recursion
+  get_url:
+    url: https://www.internic.net/domain/named.root
+    dest: /var/lib/unbound/root.hints
+    owner: unbound
+    group: unbound
+    mode: "0644"
+    force: no
+
+- name: Configure static IP for DNS server
+  blockinfile:
+    path: /etc/dhcpcd.conf
+    marker: "# {mark} LANKIT MANAGED — dns-server static IP"
+    block: |
+      interface eth0
+              static ip_address={{ lankit_dns_server_ip }}/24
+              static routers={{ lankit_dns_server_gateway }}
+              static domain_name_servers=127.0.0.1
+  notify: restart dhcpcd
+
+- name: Enable and start Unbound
+  systemd:
+    name: unbound
+    enabled: true
+    state: started
+
+# ── Pi-hole ───────────────────────────────────────────────────────────────────
+
+- name: Check if Pi-hole is installed
+  stat:
+    path: /usr/local/bin/pihole
+  register: pihole_bin
+
+- name: Install Pi-hole (unattended)
+  when: not pihole_bin.stat.exists
+  block:
+    - name: Ensure /etc/pihole exists
+      file:
+        path: /etc/pihole
+        state: directory
+        mode: "0755"
+
+    - name: Create setupVars for unattended install
+      copy:
+        content: |
+          PIHOLE_INTERFACE=eth0
+          PIHOLE_DNS_1=127.0.0.1#5335
+          QUERY_LOGGING=true
+          INSTALL_WEB_SERVER=true
+          INSTALL_WEB_INTERFACE=true
+          LIGHTTPD_ENABLED=false
+          CACHE_SIZE=10000
+          DNS_FQDN_REQUIRED=true
+          DNS_BOGUS_PRIV=true
+          BLOCKING_ENABLED=true
+        dest: /etc/pihole/setupVars.conf
+        mode: "0644"
+
+    - name: Download Pi-hole installer
+      get_url:
+        url: https://install.pi-hole.net
+        dest: /tmp/pihole-install.sh
+        mode: "0755"
+
+    - name: Run Pi-hole installer
+      command: bash /tmp/pihole-install.sh --unattended
+      environment:
+        PIHOLE_SKIP_OS_CHECK: "true"
+
+- name: Copy Pi-hole configuration script
+  copy:
+    src: configure-pihole.py
+    dest: /tmp/lankit-configure-pihole.py
+    mode: "0755"
+
+- name: Configure Pi-hole settings
+  command: python3 /tmp/lankit-configure-pihole.py
+  environment:
+    LANKIT_DNS_SERVER_IP:   "{{ lankit_dns_server_ip }}"
+    LANKIT_INTERNAL_DOMAIN: "{{ lankit_internal_domain }}"
+    LANKIT_PRIVACY_LEVEL:   "{{ lankit_privacy_level }}"
+    LANKIT_QUERY_RETENTION: "{{ lankit_query_retention }}"
+    LANKIT_BLOCK_APPLE_RELAY: "{{ lankit_block_apple_relay | string | lower }}"
+  register: pihole_config_result
+  changed_when: "(pihole_config_result.stdout | from_json).changed"
+  notify: restart pihole-ftl
+
+- name: Deploy local DNS records (dnsmasq address directives)
+  copy:
+    dest: /etc/dnsmasq.d/lankit-hosts.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # lankit local DNS — managed by lankit provision
+      # Do not edit directly
+      {% for entry in lankit_dns_hosts %}
+      address=/{{ entry.split()[1] }}/{{ entry.split()[0] }}
+      {% endfor %}
+  notify: restart pihole-ftl
+
+- name: Remove temporary configuration script
+  file:
+    path: /tmp/lankit-configure-pihole.py
+    state: absent
+
+- name: Enable and start Pi-hole FTL
+  systemd:
+    name: pihole-FTL
+    enabled: true
+    state: started
+
+# ── Apple Private Relay blocklist ────────────────────────────────────────────
+
+- name: Block Apple Private Relay domains
+  when: lankit_block_apple_relay | bool
+  block:
+    - name: Add Apple relay domains to Pi-hole blocklist
+      command: >
+        pihole --regex
+        'mask(-h2|-canary)?\.icloud\.com'
+      notify: restart pihole-ftl

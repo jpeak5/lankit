@@ -1,0 +1,377 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# lankit — network.yml
+#
+# This is the only file you need to fill out. Everything else is generated
+# from it: router config, DNS server config, firewall rules, firewall tests,
+# plain-English rules, and your rollback card.
+#
+# Work through each section top to bottom. Lines marked CHOOSE require a
+# decision — lankit will refuse to apply changes until all CHOOSE markers are replaced.
+#
+# When you're ready:
+#   lankit test-failsafe     ← practice the safety workflow first
+#   lankit provision         ← apply everything
+#   lankit commit            ← make it permanent
+#   lankit rollback-card     ← print this before you walk away
+#   lankit password-card     ← print WiFi passwords for household reference
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ─── Your Network ─────────────────────────────────────────────────────────────
+# This name appears in your WiFi SSIDs and internal hostnames.
+# Example: "Maple" → WiFi: "Maple", "Maple-IoT", "Maple-Guest"
+#          Internal: dns.maple.internal, apps.maple.internal
+household_name: "CHOOSE"          # Your network's name — used in SSID templates and the rollback card
+
+# .internal is the IANA-reserved domain for private networks. Your DNS
+# server answers *.internal queries; these names never reach the public
+# internet. You should not need to change this.
+internal_domain: "internal"
+
+
+# ─── Network Segments (VLANs) ─────────────────────────────────────────────────
+# Your network is divided into isolated segments. Devices in one segment
+# cannot reach devices in another unless you explicitly allow it below.
+#
+# Think of segments like rooms with locked doors. You decide which doors
+# to unlock, and in which direction.
+#
+# You can rename segments, add new ones, or remove ones you don't need.
+# The names you use here appear in firewall logs, DNS entries, and the
+# plain-English rules lankit generates.
+#
+# Minimum useful setup: keep "trusted" and "servers". Everything else
+# is optional.
+
+segments:
+
+  trusted:
+    vlan_id: 10
+    comment: "Your personal devices — laptops, phones, tablets"
+    subnet: "10.10.0.0/24"
+
+    # WiFi: the network name devices connect to.
+    # Set ssid to null for wired-only segments.
+    ssid: "CHOOSE"            # e.g. "HomeNetwork" — your primary trusted WiFi name
+    wifi_bands: [2ghz, 5ghz]
+
+    # Hidden SSID: true means the name won't appear in WiFi scans.
+    # Devices must know the name to connect. Slightly more private,
+    # slightly less convenient.
+    ssid_hidden: false
+
+    # Bandwidth cap for all devices in this segment combined.
+    # null = unlimited. Format: "100M" (megabits) or "1G" (gigabits).
+    bandwidth_up: null
+    bandwidth_down: null
+
+    # DNS resolver for this segment:
+    #   "filtered"   → Pi-hole (ads blocked, queries logged per privacy settings)
+    #   "unfiltered" → Public DNS (1.1.1.1, 8.8.8.8) — no filtering
+    #   "none"       → No DNS resolution
+    dns: "filtered"
+
+    # Force DNS: intercept all port-53 traffic and redirect to Pi-hole,
+    # even if a device has hardcoded DNS (e.g. Google Home → 8.8.8.8).
+    # Recommended: true for iot, optional for trusted.
+    force_dns: false
+
+    # Internet access:
+    #   "full"        → unrestricted
+    #   "egress_only" → devices can reach the internet, nothing inbound
+    #   "none"        → no internet access
+    internet: "full"
+
+    # Client isolation: when true, devices in this segment cannot
+    # see each other. Useful for guest WiFi and work devices.
+    client_isolation: false
+
+
+  work:
+    vlan_id: 25
+    comment: "Corporate managed endpoints — isolated from home devices"
+    subnet: "10.25.0.0/24"
+    ssid: "{{ household_name }}-Work"
+    wifi_bands: [5ghz]
+    ssid_hidden: false
+    bandwidth_up: null
+    bandwidth_down: null
+    dns: "filtered"
+    force_dns: false
+    internet: "full"
+    client_isolation: true
+
+
+  media:
+    vlan_id: 20
+    comment: "TVs, streaming boxes, printers, cast targets"
+    subnet: "10.20.0.0/24"
+    ssid: "{{ household_name }}-media"
+    wifi_bands: [2ghz, 5ghz]
+    ssid_hidden: false
+    bandwidth_up: null
+    bandwidth_down: null
+    dns: "filtered"
+    force_dns: true
+    internet: "full"
+    client_isolation: false
+
+
+  iot:
+    vlan_id: 30
+    comment: "Smart home devices — sensors, locks, appliances"
+    subnet: "10.30.0.0/24"
+    ssid: "{{ household_name }}-IoT"
+    wifi_bands: [2ghz]  # most IoT devices are 2.4GHz only
+    ssid_hidden: false
+    bandwidth_up: "10M"
+    bandwidth_down: "10M"
+    dns: "filtered"
+    force_dns: true     # IoT devices commonly hardcode DNS
+    internet: "egress_only"
+    client_isolation: false
+
+
+  servers:
+    vlan_id: 40
+    comment: "Servers — DNS, file shares, home automation"
+    subnet: "10.40.0.0/24"
+    ssid: null          # wired only
+    wifi_bands: []
+    ssid_hidden: false
+    bandwidth_up: null
+    bandwidth_down: null
+    dns: "filtered"
+    force_dns: false
+    internet: "full"
+    client_isolation: false
+
+
+  guest:
+    vlan_id: 50
+    comment: "Visitor WiFi — internet only, devices isolated"
+    subnet: "10.50.0.0/24"
+    ssid: "{{ household_name }}-visitors"
+    wifi_bands: [2ghz, 5ghz]
+    ssid_hidden: false
+    bandwidth_up: "50M"
+    bandwidth_down: "50M"
+    dns: "filtered"
+    force_dns: true
+    internet: "full"
+    client_isolation: true
+
+
+  quarantine:
+    vlan_id: 70
+    comment: "Unknown devices — no access until registered"
+    subnet: "10.70.0.0/24"
+    ssid: null
+    wifi_bands: []
+    ssid_hidden: false
+    bandwidth_up: null
+    bandwidth_down: null
+    dns: "none"
+    force_dns: true
+    internet: "none"
+    client_isolation: true
+
+
+  admin:
+    vlan_id: 99
+    comment: "Router and AP management — locked down"
+    subnet: "10.99.0.0/24"
+    ssid: null          # wired or WireGuard only
+    wifi_bands: []
+    ssid_hidden: false
+    bandwidth_up: null
+    bandwidth_down: null
+    dns: "filtered"
+    force_dns: false
+    internet: "none"
+    client_isolation: false
+
+
+# ─── Permissions ──────────────────────────────────────────────────────────────
+# By default, no segment can talk to any other segment.
+# Here you unlock specific doors, one direction at a time.
+#
+# "can_reach" means devices in this segment can START a connection to
+# devices in the listed segments. The other side can reply (that's how
+# networking works), but cannot start a new connection back unless you
+# also list it here.
+#
+# Every name in can_reach must match a segment name defined above.
+
+permissions:
+  trusted:
+    can_reach: [servers, media, iot, work, admin]
+
+  servers:
+    can_reach: [iot]    # e.g. Home Assistant controlling smart devices
+
+  # Segments with no entry here cannot initiate to anywhere.
+
+
+# ─── Privacy ──────────────────────────────────────────────────────────────────
+# Your DNS server sees every domain name every device looks up. These
+# settings control what it remembers. There are no defaults — you must
+# make a choice for each one.
+
+privacy:
+
+  # Query logging: what your DNS server records about lookups.
+  #
+  #   "full"      → logs which device looked up which domain, and when.
+  #                 Most useful for debugging and auditing IoT devices.
+  #
+  #   "anonymous" → logs which domains were looked up, but not which
+  #                 device asked. Nobody is individually tracked.
+  #
+  #   "none"      → no query logging. Pi-hole still blocks ads, but
+  #                 keeps no record of what was looked up.
+  #
+  # CHOOSE:
+  query_logging: anonymous     # full | anonymous | none
+
+  # Query retention: how long to keep logs (if logging is enabled).
+  # Examples: "24h", "7d", "30d", "365d"
+  #
+  # CHOOSE:
+  query_retention: 7d  # e.g. "7d"
+
+  # Dashboard visibility: who can see DNS query logs in the portal.
+  #
+  #   "admin_only"  → accessible only from the admin segment or with password
+  #   "household"   → anyone on trusted can see all devices' queries
+  #   "per_device"  → each device sees only its own queries
+  #
+  # CHOOSE:
+  dashboard_visibility:   household # admin_only | household | per_device
+
+  # Apple Private Relay: Apple devices can route DNS through iCloud,
+  # bypassing your Pi-hole entirely.
+  #
+  #   "allow" → Private Relay works. Those devices won't appear in DNS
+  #             logs and won't get ad blocking. Respects user's choice.
+  #
+  #   "block" → Block relay endpoints, forcing Apple devices through
+  #             Pi-hole. Consistent filtering, overrides user preference.
+  #
+  # CHOOSE:
+  apple_private_relay: block   # allow | block
+
+
+# ─── WiFi Passwords ───────────────────────────────────────────────────────────
+# How lankit receives WiFi passwords at provisioning time.
+#
+#   "vault"  → Encrypted file (wifi-vault.yml), managed by ansible-vault.
+#              Run: lankit secrets  to create or update passwords.
+#              Best for: keeping passwords in version control safely.
+#
+#   "env"    → Environment variables at deploy time.
+#              Run: lankit secrets  for the exact variable names and
+#              instructions for storing them in your OS keychain.
+#              Best for: shared playbooks, each household sets their own.
+#
+#   "prompt" → lankit asks at deploy time. Nothing stored anywhere.
+#              Best for: one-off setups.
+#
+wifi_password_source: vault
+
+# ─── Remote Access & DNS Security ─────────────────────────────────────────────
+
+# VPN for remote access — connect to your home network from anywhere.
+#
+#   "wireguard" → Fast, modern, simple. Requires the WireGuard app on
+#                 each device (free, available everywhere).
+#
+#   "ipsec"     → Built into every OS — no app needed. More complex to
+#                 configure, heavier on the router CPU.
+#
+#   "none"      → No remote access.
+#
+# CHOOSE:
+vpn: wireguard   # wireguard | ipsec | none
+
+# DNSSEC: validates that DNS answers haven't been tampered with in
+# transit. Unbound checks cryptographic signatures on DNS records.
+# There is no meaningful downside to enabling this.
+dnssec: true
+
+
+# ─── Hosts ────────────────────────────────────────────────────────────────────
+# Physical machines with fixed roles. lankit provisions these.
+
+hosts:
+  dns_server:
+    # Pi-hole + Unbound. The most critical host — every device depends
+    # on it. Keep it dedicated; don't run other services here.
+    hostname: "dns"
+    segment: servers
+    ip: "10.40.0.2"
+    mac: "CHOOSE"             # Run: ip link show eth0 on the Pi, or check router DHCP leases
+    ssh_user: "heimdall"
+    services: [pihole, unbound]
+
+  app_server:
+    # Optional: portals, file shares, Caddy. Separating this from the
+    # DNS server means an app crash won't take down DNS.
+    hostname: "apps"
+    segment: servers
+    ip: "10.40.0.3"
+    mac: ""
+    services: [caddy, portal]
+    enabled: false   # set true when you have the hardware
+
+
+# ─── Portals (experimental) ───────────────────────────────────────────────────
+# Web interfaces for managing your network. Works in progress.
+
+portals:
+  device:
+    # Shows each device its own info: IP, segment, DNS stats.
+    # Accessible from any segment at device.internal
+    enabled: true
+
+  network:
+    # Overview: all segments, connected devices, DNS stats.
+    # Access controlled by privacy.dashboard_visibility above.
+    enabled: true
+
+  registration:
+    # Lets household members name their devices and register real MAC
+    # addresses (important for Apple devices using randomized MACs).
+    # Unregistered devices land in quarantine until registered here.
+    enabled: true
+
+
+# ─── Router ───────────────────────────────────────────────────────────────────
+router:
+  # The router's IP on the flat/management network.
+  # Default MikroTik factory IP — change if yours differs.
+  ip: "192.168.88.1"
+
+  # SSH credentials for lankit to apply config.
+  # Change the default admin password before running lankit provision.
+  ssh_user: "admin"
+  ssh_key: "~/.ssh/lankit"
+
+  # Physical interface names (MikroTik hAP ax³ defaults).
+  # Check yours with: lankit discover (shows interface names)
+  wan_interface: "ether1"   # internet-facing port
+  lan_interface: "ether2"   # first LAN port (connected to DNS server)
+
+
+# ─── Safety ───────────────────────────────────────────────────────────────────
+# lankit provision and lankit restore apply changes in RouterOS safe mode.
+# If you don't run lankit commit within this window, the router reverts.
+# Longer = more time to verify. Shorter = faster recovery if something
+# goes wrong and you can't reach the router.
+failsafe_seconds: 300
+
+
+# ─── SSH Key ──────────────────────────────────────────────────────────────────
+# Path to your SSH private key. Used for both the router and the Pi(s).
+# Generate one if needed: ssh-keygen -t ed25519 -f ~/.ssh/lankit -C "lankit"
+ssh_key: "~/.ssh/lankit"

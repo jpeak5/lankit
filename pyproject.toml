@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lankit"
+version = "0.1.0"
+description = "Home network segmentation toolkit for MikroTik + Pi-hole"
+requires-python = ">=3.11"
+dependencies = [
+    "ansible>=9.0",
+    "click>=8.1",
+    "pyyaml>=6.0",
+    "jsonschema>=4.20",
+    "paramiko>=3.0",       # SSH to router and Pi
+    "jinja2>=3.1",         # template rendering
+    "mac-vendor-lookup>=0.1.15",
+    "pytest-testinfra>=10.0",
+    "graphviz>=0.20",      # Python wrapper; system graphviz binary optional
+    "rich>=13.0",          # terminal output: tables, trees, status
+    "ruamel.yaml>=0.18",   # comment-preserving YAML read/write (extend wizard)
+    "weasyprint>=60.0",    # rollback card PDF generation
+]
+
+[project.scripts]
+lankit = "lankit.cli.__main__:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lankit*"]
