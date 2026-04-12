@@ -3,6 +3,10 @@
 Work through these phases in order. Each phase builds confidence before
 touching anything live.
 
+This is the manual commissioning runbook for real hardware. For the automated
+test harness (unit, integration, and hardware-in-the-loop tests), see
+`docs/test-harness.md`.
+
 ---
 
 ## Phase 1 — Offline (no router needed)
