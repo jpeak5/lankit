@@ -1,0 +1,24 @@
+---
+# lankit site.yml — provision all network hosts
+#
+# Run via: lankit provision
+# Or directly: ansible-playbook ansible/site.yml -i <inventory>
+#
+# Variables (passed via --extra-vars by lankit provision):
+#   lankit_dns_server_ip      — Pi-hole host IP
+#   lankit_internal_domain    — e.g. "internal"
+#   lankit_privacy_level      — 0 | 1 | 3
+#   lankit_query_retention    — e.g. "7d"
+#   lankit_dns_hosts          — newline-separated "IP hostname" pairs
+#   lankit_block_apple_relay  — "true" | "false"
+#   lankit_dnssec             — "true" | "false"
+#   lankit_dns_server_gateway — gateway IP for the DNS server's VLAN (e.g. "10.40.0.1")
+
+- name: Provision DNS server (Pi-hole + Unbound)
+  hosts: dns_server
+  become: yes
+  vars:
+    lankit_dnssec: "{{ (lankit_dnssec | default('true')) | bool }}"
+    lankit_block_apple_relay: "{{ (lankit_block_apple_relay | default('false')) | bool }}"
+  roles:
+    - dns-server

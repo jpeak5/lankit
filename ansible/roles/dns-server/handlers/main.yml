@@ -1,0 +1,15 @@
+---
+- name: restart unbound
+  systemd:
+    name: unbound
+    state: restarted
+
+- name: restart pihole-ftl
+  systemd:
+    name: pihole-FTL
+    state: restarted
+
+- name: restart dhcpcd
+  systemd:
+    name: dhcpcd
+    state: restarted

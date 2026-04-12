@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.pytest_cache/
+.coverage
+
+# Generated outputs — recreated by lankit generate/apply/rollback-card/etc.
+ansible/generated/
+network.png
+rollback-card.txt
+password-card.txt
+
+# Live WiFi vault — contains real passphrases encrypted with ansible-vault.
+# Create yours with: lankit secrets
+# See wifi-vault.example.yml for the expected structure.
+wifi-vault.yml

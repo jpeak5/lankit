@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lankit/network.schema.json",
+  "title": "lankit network.yml schema",
+  "type": "object",
+  "required": [
+    "household_name",
+    "internal_domain",
+    "segments",
+    "permissions",
+    "privacy",
+    "wifi_password_source",
+    "vpn",
+    "dnssec",
+    "hosts",
+    "router",
+    "failsafe_seconds",
+    "ssh_key"
+  ],
+  "additionalProperties": false,
+  "properties": {
+
+    "household_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Household name used in SSIDs and internal hostnames"
+    },
+
+    "internal_domain": {
+      "type": "string",
+      "const": "internal"
+    },
+
+    "segments": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/segment"
+      }
+    },
+
+    "permissions": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/permission"
+      }
+    },
+
+    "privacy": {
+      "type": "object",
+      "required": ["query_logging", "query_retention", "dashboard_visibility", "apple_private_relay"],
+      "additionalProperties": false,
+      "properties": {
+        "query_logging": {
+          "type": "string",
+          "enum": ["full", "anonymous", "none"],
+          "description": "CHOOSE: full | anonymous | none"
+        },
+        "query_retention": {
+          "type": "string",
+          "pattern": "^[0-9]+(h|d)$",
+          "description": "e.g. 7d, 24h, 30d"
+        },
+        "dashboard_visibility": {
+          "type": "string",
+          "enum": ["admin_only", "household", "per_device"]
+        },
+        "apple_private_relay": {
+          "type": "string",
+          "enum": ["allow", "block"]
+        }
+      }
+    },
+
+    "wifi_password_source": {
+      "type": "string",
+      "enum": ["vault", "env", "prompt"]
+    },
+
+    "vpn": {
+      "type": "string",
+      "enum": ["wireguard", "ipsec", "none"]
+    },
+
+    "dnssec": {
+      "type": "boolean"
+    },
+
+    "hosts": {
+      "type": "object",
+      "required": ["dns_server"],
+      "additionalProperties": false,
+      "properties": {
+        "dns_server": { "$ref": "#/$defs/host" },
+        "app_server": { "$ref": "#/$defs/host" }
+      }
+    },
+
+    "portals": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "device":       { "$ref": "#/$defs/portal" },
+        "network":      { "$ref": "#/$defs/portal" },
+        "registration": { "$ref": "#/$defs/portal" }
+      }
+    },
+
+    "router": {
+      "type": "object",
+      "required": ["ip", "ssh_user", "ssh_key", "wan_interface", "lan_interface"],
+      "additionalProperties": false,
+      "properties": {
+        "ip":            { "type": "string", "format": "ipv4" },
+        "ssh_user":      { "type": "string" },
+        "ssh_key":       { "type": "string" },
+        "wan_interface": { "type": "string" },
+        "lan_interface": { "type": "string" }
+      }
+    },
+
+    "failsafe_seconds": {
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 600
+    },
+
+    "ssh_key": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+
+  "$defs": {
+
+    "segment": {
+      "type": "object",
+      "required": [
+        "vlan_id", "comment", "subnet",
+        "ssid", "wifi_bands", "ssid_hidden",
+        "bandwidth_up", "bandwidth_down",
+        "dns", "force_dns", "internet", "client_isolation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "vlan_id":        { "type": "integer", "minimum": 1, "maximum": 4094 },
+        "comment":        { "type": "string" },
+        "subnet":         { "type": "string" },
+        "ssid":           { "type": ["string", "null"] },
+        "wifi_bands": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["2ghz", "5ghz"] },
+          "uniqueItems": true
+        },
+        "ssid_hidden":    { "type": "boolean" },
+        "bandwidth_up":   { "type": ["string", "null"], "pattern": "^[0-9]+(M|G)$" },
+        "bandwidth_down": { "type": ["string", "null"], "pattern": "^[0-9]+(M|G)$" },
+        "dns": {
+          "type": "string",
+          "enum": ["filtered", "unfiltered", "none"]
+        },
+        "force_dns":        { "type": "boolean" },
+        "internet": {
+          "type": "string",
+          "enum": ["full", "egress_only", "none"]
+        },
+        "client_isolation": { "type": "boolean" }
+      }
+    },
+
+    "permission": {
+      "type": "object",
+      "required": ["can_reach"],
+      "additionalProperties": false,
+      "properties": {
+        "can_reach": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+
+    "host": {
+      "type": "object",
+      "required": ["hostname", "segment", "ip", "mac", "services"],
+      "additionalProperties": false,
+      "properties": {
+        "hostname": { "type": "string" },
+        "segment":  { "type": "string" },
+        "ip":       { "type": "string", "format": "ipv4" },
+        "mac":      { "type": "string" },
+        "services": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "ssh_user": { "type": "string" },
+        "enabled":  { "type": "boolean" }
+      }
+    },
+
+    "portal": {
+      "type": "object",
+      "required": ["enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    }
+  }
+}

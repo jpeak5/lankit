@@ -1,0 +1,13 @@
+# wifi-vault.example.yml — shows the expected structure before encryption
+#
+# DO NOT store real passphrases here. This file is committed as documentation only.
+# Your real wifi-vault.yml is created and managed by: lankit secrets
+#
+# Format: one entry per WiFi-enabled segment, keyed by segment name.
+# Passphrases must be 8+ characters (WPA2 minimum).
+
+trusted: "your-trusted-passphrase"
+work: "your-work-passphrase"
+media: "your-media-passphrase"
+iot: "your-iot-passphrase"
+guest: "your-guest-passphrase"

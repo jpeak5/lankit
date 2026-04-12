@@ -1,0 +1,30 @@
+from lankit.cli.commands import (
+    discover,
+    provision,
+    commit,
+    extend,
+    rollback,
+    restore,
+    status,
+    rules,
+    generate,
+    apply,
+    diagram,
+    test_failsafe,
+    rollback_card,
+    secrets,
+    password_card,
+    explain,
+    matrix,
+    probe,
+    snapshots_cmd,
+    audit,
+)
+
+__all__ = [
+    "discover", "provision", "commit", "extend", "rollback",
+    "restore", "status", "rules", "generate", "apply",
+    "diagram", "test_failsafe", "rollback_card",
+    "secrets", "password_card", "explain", "matrix", "probe",
+    "snapshots_cmd", "audit",
+]
