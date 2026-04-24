@@ -49,22 +49,40 @@ def provision(config_path, host, tags, check, verbose):
         console.print("Expected ansible/site.yml in the lankit directory.")
         raise SystemExit(1)
 
-    # Generate ephemeral inventory
-    inventory_lines = ["[dns_server]"]
+    # Map services to Ansible groups — supports single-box (all services on one host)
+    # and multi-box (concerns separated by hardware) equally.
+    _SERVICE_GROUP = {
+        "pihole":  "dns_server",
+        "unbound": "dns_server",
+        "caddy":   "app_server",
+        "portal":  "app_server",
+    }
+
+    ssh_key = str(Path(cfg.ssh_key).expanduser())
+    groups: dict[str, dict] = {}  # group → {host_name: Host}
     for name, h in cfg.hosts.items():
         if not h.enabled:
             continue
         if host and name != host:
             continue
-        ssh_key = str(Path(cfg.ssh_key).expanduser())
-        inventory_lines.append(
-            f"{h.hostname} ansible_host={h.ip} ansible_user={h.ssh_user} "
-            f"ansible_ssh_private_key_file={ssh_key}"
-        )
-    inventory_lines.append("")
+        for svc in h.services:
+            group = _SERVICE_GROUP.get(svc)
+            if group:
+                groups.setdefault(group, {})[name] = h
+
+    inventory_lines = []
+    for group, hosts in groups.items():
+        inventory_lines.append(f"[{group}]")
+        for name, h in hosts.items():
+            inventory_lines.append(
+                f"{name} ansible_host={h.ip} ansible_user={h.ssh_user} "
+                f"ansible_ssh_private_key_file={ssh_key}"
+            )
+        inventory_lines.append("")
 
     # Pass lankit variables as extra-vars
     dns = cfg.hosts.get("dns_server")
+    app = cfg.hosts.get("app_server")
     extra_vars = {
         "lankit_dns_server_ip":      dns.ip if dns else "",
         "lankit_dns_server_gateway": _dns_gateway(cfg),
@@ -75,6 +93,9 @@ def provision(config_path, host, tags, check, verbose):
         "lankit_block_apple_relay": str(cfg.privacy.apple_private_relay == "block").lower(),
         "lankit_dns_hosts":         _build_dns_hosts(cfg),
         "lankit_ssh_public_key":    _read_public_key(cfg.ssh_key),
+        "lankit_portals":           cfg.portals,
+        "lankit_app_server_ip":     app.ip if app and app.enabled else "",
+        "household_name":           cfg.household_name,
     }
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as inv_f:

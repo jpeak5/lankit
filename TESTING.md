@@ -62,7 +62,7 @@ lankit test-failsafe                 # verify auto-revert works before relying o
 lankit provision                     # runs ansible/site.yml against dns_server
 ```
 
-Pre-flight checks on Asgard before running:
+Pre-flight checks on your development machine before running:
 - `pip3 show toml` — required by `configure-pihole.py`
 - OUI database: first run of `lankit discover` will try to download it;
   if it fails, run once manually:

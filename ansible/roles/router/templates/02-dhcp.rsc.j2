@@ -51,10 +51,16 @@ add address={{ seg.subnet }} \
 {% endfor %}
 
 {% if include_globals %}
-# ── Static lease: DNS server ─────────────────────────────────────────────────
+# ── Static leases: named hosts ───────────────────────────────────────────────
 /ip dhcp-server lease
 add address={{ dns_server_ip }} \
     mac-address={{ dns_server_mac }} \
     server=dhcp-{{ dns_server_segment }} \
     comment="kit:dhcp:dns-server:lease"
+{% if app_server_ip %}
+add address={{ app_server_ip }} \
+    mac-address={{ app_server_mac }} \
+    server=dhcp-{{ app_server_segment }} \
+    comment="kit:dhcp:app-server:lease"
+{% endif %}
 {% endif %}

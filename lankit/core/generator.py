@@ -142,6 +142,8 @@ def _build_context(
         "dns_server_vlan_id": cfg.segments[dns.segment].vlan_id,
         "dns_server_gateway": str(ipaddress.ip_network(cfg.segments[dns.segment].subnet, strict=False).network_address + 1),
         "app_server_ip":      app.ip if app and app.enabled else None,
+        "app_server_mac":     app.mac if app and app.enabled else None,
+        "app_server_segment": app.segment if app and app.enabled else None,
         "wan_interface":      cfg.router.wan_interface,
         "lan_interface":      cfg.router.lan_interface,
         "wifi_passphrases":   wifi_passphrases,

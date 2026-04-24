@@ -24,7 +24,7 @@ Add a `lankit health` command (or promote `lankit probe` with a cleaner default 
 ```
 lankit health
 
-  Six2ate — 192.168.88.1 — RouterOS 7.14.2
+  MyHome — 192.168.88.1 — RouterOS 7.14.2
 
   Segments     8/8  all rules present
   Gateways     8/8  all reachable

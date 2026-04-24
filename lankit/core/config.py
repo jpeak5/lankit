@@ -114,6 +114,7 @@ class Config:
     router: Router
     failsafe_seconds: int
     ssh_key: str
+    portals: dict[str, bool]  # portal name → enabled
 
     def dns_server_ip(self) -> str:
         """IP of the dns_server host."""
@@ -301,6 +302,11 @@ def _build_config(raw: dict) -> Config:
         lan_interface=router_raw["lan_interface"],
     )
 
+    portals = {
+        name: bool(p.get("enabled", False))
+        for name, p in raw.get("portals", {}).items()
+    }
+
     return Config(
         household_name=raw["household_name"],
         internal_domain=raw["internal_domain"],
@@ -314,6 +320,7 @@ def _build_config(raw: dict) -> Config:
         router=router,
         failsafe_seconds=raw["failsafe_seconds"],
         ssh_key=raw["ssh_key"],
+        portals=portals,
     )
 
 

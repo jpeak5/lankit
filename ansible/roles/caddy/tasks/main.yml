@@ -1,0 +1,81 @@
+---
+# caddy role — installs Caddy and configures reverse proxy / static file serving
+# for lankit portals. TLS is deferred; all sites served over HTTP for now.
+
+# ── Bootstrap ────────────────────────────────────────────────────────────────
+
+- name: Bootstrap Python
+  raw: apt-get install -y python3
+  changed_when: false
+
+- name: Install lankit SSH public key
+  authorized_key:
+    user: "{{ ansible_user }}"
+    key: "{{ lankit_ssh_public_key }}"
+    state: present
+
+# ── Caddy installation ────────────────────────────────────────────────────────
+
+- name: Install Caddy apt dependencies
+  apt:
+    name:
+      - debian-keyring
+      - debian-archive-keyring
+      - apt-transport-https
+      - curl
+    state: present
+    update_cache: yes
+
+- name: Add Caddy GPG key
+  shell: >
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key'
+    | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+
+- name: Add Caddy apt repository
+  shell: >
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt'
+    | tee /etc/apt/sources.list.d/caddy-stable.list
+  args:
+    creates: /etc/apt/sources.list.d/caddy-stable.list
+
+- name: Install Caddy
+  apt:
+    name: caddy
+    state: present
+    update_cache: yes
+
+# ── Portal document roots ─────────────────────────────────────────────────────
+
+- name: Create portal document roots
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: caddy
+    group: caddy
+    mode: "0755"
+  loop:
+    - /var/www/lankit-portal
+    - /var/www/lankit-portal/me
+    - /var/www/lankit-portal/apps
+    - /var/www/lankit-portal/register
+
+# ── Caddyfile ─────────────────────────────────────────────────────────────────
+
+- name: Deploy Caddyfile
+  template:
+    src: Caddyfile.j2
+    dest: /etc/caddy/Caddyfile
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart caddy
+
+# ── Service ───────────────────────────────────────────────────────────────────
+
+- name: Enable and start Caddy
+  systemd:
+    name: caddy
+    enabled: true
+    state: started

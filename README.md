@@ -10,6 +10,10 @@ lankit is a configuration toolkit for the MikroTik hAP ax³ that generates Route
 - **DNS** — Pi-hole (ad blocking, query logging) backed by Unbound (full
   recursive resolution, DNSSEC). Adding a new VLAN requires no DNS
   reconfiguration.
+- **Portals** — optional web interfaces served by Caddy on a second Pi
+  (`app_server`): `me.internal` (device self-service), `apps.internal`
+  (landing page), `register.internal` (MAC registration). Currently
+  placeholder pages; dynamic features tracked in the issue queue.
 - **Safety** — every `lankit apply` snapshots the router config first;
   `lankit rollback` restores it. If you push a bad config and lose WiFi,
   you can't reach the router from your laptop — the printable rollback card
@@ -21,6 +25,8 @@ lankit is a configuration toolkit for the MikroTik hAP ax³ that generates Route
 - MikroTik router (tested on hAP ax³) with SSH access enabled
 - Raspberry Pi running Raspberry Pi OS, connected to the router via ethernet
   (hosts Pi-hole + Unbound; required for `lankit provision`)
+- Second Raspberry Pi (optional) for the app server — portals, file shares.
+  Set `hosts.app_server.enabled: true` in `network.yml` when you have it.
 - graphviz system package (optional, for `lankit diagram`)
 
 Ansible is installed automatically as part of `pip install -e .`.
@@ -53,8 +59,8 @@ lankit discover --new    # walks you through creating network.yml (~10 minutes)
 ### Option B — Edit the template directly
 
 ```bash
-cp network.yml my-network.yml
-# open my-network.yml and fill in all CHOOSE fields
+cp network.yml.dist network.yml
+# open network.yml and fill in all CHOOSE fields
 ```
 
 Then:
@@ -80,7 +86,7 @@ lankit provision                   # set up Pi-hole + Unbound
 | `lankit commit` | Save current router config as a named snapshot |
 | `lankit rollback` | Restore the pre-apply snapshot |
 | `lankit restore` | Restore any snapshot interactively |
-| `lankit provision` | Run Ansible to set up Pi-hole + Unbound |
+| `lankit provision` | Run Ansible to set up Pi-hole + Unbound (and app server if enabled) |
 | `lankit rules` | Show generated firewall rules (filterable by segment/unit) |
 | `lankit diagram` | Generate a network topology diagram |
 | `lankit rollback-card` | Generate a printable emergency recovery card |
@@ -95,7 +101,8 @@ See `DESIGN.md` for the full architecture, philosophy, and design decisions.
 
 ```
 lankit/
-├── network.yml              # your network declaration (edit this)
+├── network.yml.dist         # template — copy to network.yml and fill in CHOOSE fields
+├── network.yml              # your private config (gitignored)
 ├── network.schema.json      # JSON Schema for validation
 ├── lankit/
 │   ├── core/
@@ -108,7 +115,9 @@ lankit/
 ├── ansible/
 │   ├── site.yml             # main playbook (run by lankit provision)
 │   └── roles/
-│       └── dns-server/      # Pi-hole + Unbound role
+│       ├── dns-server/      # Pi-hole + Unbound role
+│       ├── caddy/           # Caddy web server (app_server host)
+│       └── portal/          # portal placeholder pages
 └── ansible/generated/       # rendered .rsc scripts (git-ignored)
 ```
 

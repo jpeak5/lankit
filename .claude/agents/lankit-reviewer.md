@@ -50,18 +50,22 @@ kit/
 
 You may run read-only SSH commands to compare code against what's actually deployed. **Never run commands that mutate state.**
 
-### Pi (janus) — forbidden: `systemctl restart`, `pihole`, `apt`, `sed -i`, writes of any kind
+Derive connection details from `network.yml` before connecting:
+- DNS server: `hosts.dns_server.ip` and `hosts.dns_server.ssh_user`
+- Router: `router.ip` (MikroTik default first-boot: 192.168.88.1), user: `router.ssh_user`, key: `~/.ssh/lankit`
+
+### DNS server Pi — forbidden: `systemctl restart`, `pihole`, `apt`, `sed -i`, writes of any kind
 
 ```bash
-ssh janus "cat /etc/unbound/unbound.conf.d/lankit.conf"
-ssh janus "cat /etc/dnsmasq.d/lankit-hosts.conf"
-ssh janus "cat /etc/pihole/pihole.toml | grep -A5 'dns\|webserver\|misc'"
-ssh janus "systemctl is-active unbound pihole-FTL"
-ssh janus "grep 'lankit' /etc/dhcpcd.conf"
-ssh janus "ls -la /etc/unbound/unbound.conf.d/"
+ssh -i ~/.ssh/lankit <ssh_user>@<dns_server_ip> "cat /etc/unbound/unbound.conf.d/lankit.conf"
+ssh -i ~/.ssh/lankit <ssh_user>@<dns_server_ip> "cat /etc/dnsmasq.d/lankit-hosts.conf"
+ssh -i ~/.ssh/lankit <ssh_user>@<dns_server_ip> "cat /etc/pihole/pihole.toml | grep -A5 'dns\|webserver\|misc'"
+ssh -i ~/.ssh/lankit <ssh_user>@<dns_server_ip> "systemctl is-active unbound pihole-FTL"
+ssh -i ~/.ssh/lankit <ssh_user>@<dns_server_ip> "grep 'lankit' /etc/dhcpcd.conf"
+ssh -i ~/.ssh/lankit <ssh_user>@<dns_server_ip> "ls -la /etc/unbound/unbound.conf.d/"
 ```
 
-### Router (admin@192.168.88.1, key: ~/.ssh/lankit) — all RouterOS `print` and `export` commands are safe
+### Router (key: ~/.ssh/lankit) — all RouterOS `print` and `export` commands are safe
 
 ```bash
 ssh -i ~/.ssh/lankit admin@192.168.88.1 "/interface bridge vlan print detail"

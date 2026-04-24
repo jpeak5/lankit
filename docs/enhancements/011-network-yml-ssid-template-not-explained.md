@@ -29,7 +29,7 @@ Add a comment above the first occurrence of `{{ household_name }}` in `network.y
 # ─── WiFi ─────────────────────────────────────────────────────────────────────
 # SSID: the name devices see when scanning for WiFi.
 # {{ household_name }} is replaced with your household_name setting above.
-# Example: if household_name is "Peak", the IoT SSID becomes "Peak-IoT".
+# Example: if household_name is "Maple", the IoT SSID becomes "Maple-IoT".
 # You can use it in any string, or type a plain name directly.
 ssid: "{{ household_name }}-IoT"
 ```

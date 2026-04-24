@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>apps.{{ lankit_internal_domain }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 480px; margin: 4rem auto; padding: 0 1rem; color: #333; }
+    h1 { font-size: 1.2rem; font-weight: 600; }
+    ul { padding-left: 1.2rem; }
+    li { margin: 0.4rem 0; }
+    a { color: #0066cc; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    p { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>{{ household_name | default('Home') }} network</h1>
+  <ul>
+    <li><a href="http://me.{{ lankit_internal_domain }}">me.{{ lankit_internal_domain }}</a> — your device info</li>
+    {% if lankit_portals.get('registration') %}
+    <li><a href="http://register.{{ lankit_internal_domain }}">register.{{ lankit_internal_domain }}</a> — register a device</li>
+    {% endif %}
+    <li><a href="http://dns.{{ lankit_internal_domain }}/admin">dns.{{ lankit_internal_domain }}/admin</a> — Pi-hole</li>
+  </ul>
+</body>
+</html>

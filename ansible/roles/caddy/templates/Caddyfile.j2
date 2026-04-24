@@ -1,0 +1,26 @@
+# Caddyfile — managed by lankit provision
+# Do not edit directly
+
+{
+    admin localhost:2019
+}
+
+# Self-service device portal — reachable from all segments
+http://me.{{ lankit_internal_domain }} {
+    root * /var/www/lankit-portal/me
+    file_server
+}
+
+# App server landing page
+http://apps.{{ lankit_internal_domain }} {
+    root * /var/www/lankit-portal/apps
+    file_server
+}
+
+{% if lankit_portals.get('registration') %}
+# Device registration portal
+http://register.{{ lankit_internal_domain }} {
+    root * /var/www/lankit-portal/register
+    file_server
+}
+{% endif %}

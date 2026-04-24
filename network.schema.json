@@ -98,12 +98,7 @@
 
     "portals": {
       "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "device":       { "$ref": "#/$defs/portal" },
-        "network":      { "$ref": "#/$defs/portal" },
-        "registration": { "$ref": "#/$defs/portal" }
-      }
+      "additionalProperties": { "$ref": "#/$defs/portal" }
     },
 
     "router": {

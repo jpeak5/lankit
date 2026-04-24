@@ -143,7 +143,7 @@ The single file a user fills out. Organized in sections.
 ```yaml
 # ─── Your Network ─────────────────────────────────────────
 # This name appears in your WiFi SSIDs and internal hostnames.
-# Example: "Peak" → WiFi SSIDs "Peak", "Peak-IoT", "Peak-Guest"
+# Example: "Maple" → WiFi SSIDs "Maple", "Maple-IoT", "Maple-Guest"
 household_name: ""
 
 # Internal domain for services on your network.
@@ -501,19 +501,17 @@ hosts:
 # in progress — functional but evolving.
 
 portals:
-  device_portal:
+  me:
     # Shows each device its own info: IP, segment, DNS stats.
-    # Accessible from any segment at device.{{ internal_domain }}
-    hostname: "device"
+    # Accessible from any segment at me.{{ internal_domain }}
     enabled: true
 
-  network_dashboard:
+  network:
     # Overview of all segments, connected devices, DNS stats.
     # Access controlled by privacy.dashboard_visibility above.
-    hostname: "network"
     enabled: true
 
-  registration_portal:
+  registration:
     # Apple (and some Android) devices use random MAC addresses
     # for privacy. This means your network sees a "new" device
     # every time the random address rotates.
@@ -525,7 +523,6 @@ portals:
     #
     # This is opt-in: unregistered devices still work, they just
     # may land in quarantine or get a new IP periodically.
-    hostname: "register"
     enabled: true
 ```
 
@@ -611,14 +608,14 @@ Auto-generated human-readable doc:
 ```markdown
 ## Network Rules
 
-### Trusted (VLAN 10 — "Peak")
+### Trusted (VLAN 10 — "Maple")
 - Can reach: Servers, Media, IoT, Admin
 - Internet: full, unrestricted
 - DNS: filtered through Pi-hole
 - Hardcoded DNS override: allowed (force_dns is off)
 - Devices can see each other
 
-### IoT (VLAN 30 — "Peak-IoT")
+### IoT (VLAN 30 — "Maple-IoT")
 - Cannot reach: any other segment
 - Internet: outbound only (nothing inbound)
 - DNS: filtered through Pi-hole
@@ -626,7 +623,7 @@ Auto-generated human-readable doc:
 - Bandwidth: 10 Mbps up / 10 Mbps down
 - Devices can see each other
 
-### Guest (VLAN 50 — "Peak-Guest")
+### Guest (VLAN 50 — "Maple-Guest")
 - Cannot reach: any other segment
 - Internet: full, unrestricted
 - DNS: filtered through Pi-hole
@@ -728,7 +725,7 @@ Sample output:
   192.168.88.47    b8:27:eb:3c:aa:12  Raspberry Pi Found.     —             ← new, 2m ago
   192.168.88.251   60:45:2e:74:22:dc  System76                system76      trusted
   192.168.88.69    4c:b9:ea:58:58:70  iRobot Corporation      roomba        iot
-  192.168.88.14    4a:21:72:48:3a:20  (private/randomized)    jason-phone   trusted
+  192.168.88.14    4a:21:72:48:3a:20  (private/randomized)    my-phone      trusted
   192.168.88.34    f6:ec:1c:2c:5f:93  (private/randomized)    —             ⚠ unknown
 ```
 
@@ -1238,8 +1235,8 @@ lankit/
 │   │   │   └── templates/
 │   │   │       ├── pihole.toml.j2
 │   │   │       └── unbound.conf.j2
-│   │   ├── portal/          ← deploys FastAPI app to app_server
-│   │   └── caddy/           ← reverse proxy for *.internal
+│   │   ├── caddy/           ← Caddy web server for app_server
+│   │   └── portal/          ← placeholder HTML pages for *.internal portals
 │   └── generated/           ← output: .rsc scripts, RULES.md, TEST-MATRIX.md
 │
 ├── tests/                   ← testinfra suite

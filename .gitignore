@@ -19,3 +19,10 @@ password-card.txt
 # Create yours with: lankit secrets
 # See wifi-vault.example.yml for the expected structure.
 wifi-vault.yml
+
+# Your private network declaration — contains real IPs, MACs, hostnames.
+# Copy network.yml.dist to network.yml and fill in your values.
+network.yml
+
+# Local Claude Code settings — permission grants are instance-specific.
+.claude/settings.local.json

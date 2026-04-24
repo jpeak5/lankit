@@ -1,0 +1,32 @@
+---
+# portal role — deploys lankit portal pages to /var/www/lankit-portal/
+# Caddy (caddy role) serves these files. This role owns the content;
+# the caddy role owns the server config.
+#
+# Current state: placeholder HTML. The portal app (dynamic device info,
+# self-service controls) is tracked in the issue queue.
+
+- name: Deploy me portal page
+  template:
+    src: me.html.j2
+    dest: /var/www/lankit-portal/me/index.html
+    owner: caddy
+    group: caddy
+    mode: "0644"
+
+- name: Deploy apps landing page
+  template:
+    src: apps.html.j2
+    dest: /var/www/lankit-portal/apps/index.html
+    owner: caddy
+    group: caddy
+    mode: "0644"
+
+- name: Deploy registration portal page
+  when: lankit_portals.get('registration', false)
+  template:
+    src: register.html.j2
+    dest: /var/www/lankit-portal/register/index.html
+    owner: caddy
+    group: caddy
+    mode: "0644"

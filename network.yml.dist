@@ -1,5 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# lankit — network.yml
+# lankit — network.yml.dist
+#
+# This is the distributable template. Copy it to network.yml and fill in
+# your values. network.yml is gitignored — your real config stays private.
 #
 # This is the only file you need to fill out. Everything else is generated
 # from it: router config, DNS server config, firewall rules, firewall tests,
@@ -232,13 +235,13 @@ privacy:
   #                 keeps no record of what was looked up.
   #
   # CHOOSE:
-  query_logging: anonymous     # full | anonymous | none
+  query_logging: "CHOOSE"     # full | anonymous | none
 
   # Query retention: how long to keep logs (if logging is enabled).
   # Examples: "24h", "7d", "30d", "365d"
   #
   # CHOOSE:
-  query_retention: 7d  # e.g. "7d"
+  query_retention: "CHOOSE"   # e.g. "7d"
 
   # Dashboard visibility: who can see DNS query logs in the portal.
   #
@@ -247,7 +250,7 @@ privacy:
   #   "per_device"  → each device sees only its own queries
   #
   # CHOOSE:
-  dashboard_visibility:   household # admin_only | household | per_device
+  dashboard_visibility: "CHOOSE"  # admin_only | household | per_device
 
   # Apple Private Relay: Apple devices can route DNS through iCloud,
   # bypassing your Pi-hole entirely.
@@ -259,7 +262,7 @@ privacy:
   #             Pi-hole. Consistent filtering, overrides user preference.
   #
   # CHOOSE:
-  apple_private_relay: block   # allow | block
+  apple_private_relay: "CHOOSE"   # allow | block
 
 
 # ─── WiFi Passwords ───────────────────────────────────────────────────────────
@@ -292,7 +295,7 @@ wifi_password_source: vault
 #   "none"      → No remote access.
 #
 # CHOOSE:
-vpn: wireguard   # wireguard | ipsec | none
+vpn: "CHOOSE"   # wireguard | ipsec | none
 
 # DNSSEC: validates that DNS answers haven't been tampered with in
 # transit. Unbound checks cryptographic signatures on DNS records.
@@ -311,7 +314,7 @@ hosts:
     segment: servers
     ip: "10.40.0.2"
     mac: "CHOOSE"             # Run: ip link show eth0 on the Pi, or check router DHCP leases
-    ssh_user: "heimdall"
+    ssh_user: "CHOOSE"        # The user lankit SSHes in as (must have sudo)
     services: [pihole, unbound]
 
   app_server:
@@ -320,18 +323,19 @@ hosts:
     hostname: "apps"
     segment: servers
     ip: "10.40.0.3"
-    mac: ""
+    mac: "CHOOSE"             # Run: ip link show eth0 on the Pi, or check router DHCP leases
+    ssh_user: "CHOOSE"        # The user lankit SSHes in as (must have sudo)
     services: [caddy, portal]
-    enabled: false   # set true when you have the hardware
+    enabled: false            # Set to true once the host is provisioned
 
 
 # ─── Portals (experimental) ───────────────────────────────────────────────────
 # Web interfaces for managing your network. Works in progress.
 
 portals:
-  device:
+  me:
     # Shows each device its own info: IP, segment, DNS stats.
-    # Accessible from any segment at device.internal
+    # Accessible from any segment at me.internal
     enabled: true
 
   network:
