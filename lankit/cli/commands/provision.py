@@ -14,15 +14,22 @@ from lankit.cli.__main__ import cli
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Pass -v to ansible-playbook")
 def provision(config_path, host, tags, check, verbose):
-    """Run Ansible to provision network hosts (Pi-hole, Unbound, etc.).
+    """Run Ansible to provision network hosts.
 
-    Runs ansible/site.yml against the hosts defined in network.yml.
+    Provisions all enabled hosts defined in network.yml:
+      - dns_server: Pi-hole (ad blocking) + Unbound (recursive DNS, DNSSEC)
+      - app_server: Caddy web server + portal pages (me/apps/register.internal)
+        — only runs if hosts.app_server.enabled is true in network.yml
+
     Generates a temporary Ansible inventory from network.yml before running.
+    Hosts are grouped by their services: list, so a single Pi running both
+    pihole and caddy will appear in both groups.
 
     \b
     Examples:
       lankit provision
       lankit provision --host dns_server
+      lankit provision --host app_server
       lankit provision --tags pihole
       lankit provision --check
     """
