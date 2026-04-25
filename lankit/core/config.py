@@ -101,6 +101,13 @@ class Router:
 
 
 @dataclass
+class TLS:
+    cert: str
+    key: str
+    ca_cert: str
+
+
+@dataclass
 class Config:
     household_name: str
     internal_domain: str
@@ -115,6 +122,7 @@ class Config:
     failsafe_seconds: int
     ssh_key: str
     portals: dict[str, bool]  # portal name → enabled
+    tls: Optional[TLS] = None
 
     def dns_server_ip(self) -> str:
         """IP of the dns_server host."""
@@ -307,6 +315,20 @@ def _build_config(raw: dict) -> Config:
         for name, p in raw.get("portals", {}).items()
     }
 
+    tls = None
+    if tls_raw := raw.get("tls"):
+        config_dir = Path(os.environ.get("LANKIT_CONFIG", "network.yml")).parent
+        def _resolve_tls_path(p: str) -> str:
+            resolved = Path(p).expanduser()
+            if not resolved.is_absolute():
+                resolved = config_dir / resolved
+            return str(resolved)
+        tls = TLS(
+            cert=_resolve_tls_path(tls_raw["cert"]),
+            key=_resolve_tls_path(tls_raw["key"]),
+            ca_cert=_resolve_tls_path(tls_raw["ca_cert"]),
+        )
+
     return Config(
         household_name=raw["household_name"],
         internal_domain=raw["internal_domain"],
@@ -321,6 +343,7 @@ def _build_config(raw: dict) -> Config:
         failsafe_seconds=raw["failsafe_seconds"],
         ssh_key=raw["ssh_key"],
         portals=portals,
+        tls=tls,
     )
 
 

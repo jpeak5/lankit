@@ -5,31 +5,76 @@
     admin localhost:2019
 }
 
-# Self-service device portal — Flask app, all segments
+{% if lankit_tls_enabled %}
+# ── HTTPS mode ────────────────────────────────────────────────────────────────
+
+# HTTP: serve CA cert for devices that haven't trusted it yet; redirect all else
+http://me.{{ lankit_internal_domain }},
+http://network.{{ lankit_internal_domain }},
+http://apps.{{ lankit_internal_domain }}{% if lankit_portals.get('registration') %},
+http://register.{{ lankit_internal_domain }}{% endif %} {
+    handle /ca.crt {
+        root * /var/www/lankit-portal/apps
+        file_server
+    }
+    redir https://{host}{uri} 308
+}
+
+me.{{ lankit_internal_domain }} {
+    tls /etc/lankit-portal/tls/cert.pem /etc/lankit-portal/tls/key.pem
+    reverse_proxy localhost:5000 {
+        header_up X-Real-IP {remote_host}
+    }
+}
+
+network.{{ lankit_internal_domain }} {
+    tls /etc/lankit-portal/tls/cert.pem /etc/lankit-portal/tls/key.pem
+    reverse_proxy localhost:5000 {
+        header_up X-Real-IP {remote_host}
+    }
+}
+
+apps.{{ lankit_internal_domain }} {
+    tls /etc/lankit-portal/tls/cert.pem /etc/lankit-portal/tls/key.pem
+    root * /var/www/lankit-portal/apps
+    file_server
+}
+
+{% if lankit_portals.get('registration') %}
+register.{{ lankit_internal_domain }} {
+    tls /etc/lankit-portal/tls/cert.pem /etc/lankit-portal/tls/key.pem
+    reverse_proxy localhost:5000 {
+        header_up X-Real-IP {remote_host}
+    }
+}
+{% endif %}
+
+{% else %}
+# ── HTTP mode (TLS not configured) ────────────────────────────────────────────
+
 http://me.{{ lankit_internal_domain }} {
     reverse_proxy localhost:5000 {
         header_up X-Real-IP {remote_host}
     }
 }
 
-# Network dashboard — Flask app
 http://network.{{ lankit_internal_domain }} {
     reverse_proxy localhost:5000 {
         header_up X-Real-IP {remote_host}
     }
 }
 
-# App server landing page — static HTML (v1)
 http://apps.{{ lankit_internal_domain }} {
     root * /var/www/lankit-portal/apps
     file_server
 }
 
 {% if lankit_portals.get('registration') %}
-# Device registration portal — Flask app
 http://register.{{ lankit_internal_domain }} {
     reverse_proxy localhost:5000 {
         header_up X-Real-IP {remote_host}
     }
 }
+{% endif %}
+
 {% endif %}

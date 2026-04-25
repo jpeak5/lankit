@@ -23,22 +23,31 @@
     <p>apps.{{ lankit_internal_domain }}</p>
   </header>
 
+  {% set scheme = 'https' if lankit_tls_enabled else 'http' %}
+
   <div class="card">
-    <a href="http://me.{{ lankit_internal_domain }}">me.{{ lankit_internal_domain }}</a>
+    <a href="{{ scheme }}://me.{{ lankit_internal_domain }}">me.{{ lankit_internal_domain }}</a>
     <p class="desc">See your device's ad-blocking stats, or pause it for a while.</p>
   </div>
 
   {% if lankit_portals.get('network') %}
   <div class="card">
-    <a href="http://network.{{ lankit_internal_domain }}">network.{{ lankit_internal_domain }}</a>
+    <a href="{{ scheme }}://network.{{ lankit_internal_domain }}">network.{{ lankit_internal_domain }}</a>
     <p class="desc">Check if the internet is working and see what devices are online.</p>
   </div>
   {% endif %}
 
   {% if lankit_portals.get('registration') %}
   <div class="card">
-    <a href="http://register.{{ lankit_internal_domain }}">register.{{ lankit_internal_domain }}</a>
+    <a href="{{ scheme }}://register.{{ lankit_internal_domain }}">register.{{ lankit_internal_domain }}</a>
     <p class="desc">Name a new device so the network remembers it.</p>
+  </div>
+  {% endif %}
+
+  {% if lankit_tls_enabled %}
+  <div class="card" style="border-color:#e2e8f0">
+    <a href="/ca.crt" style="color:#64748b">Download network certificate</a>
+    <p class="desc">Install to enable secure connections to all .internal addresses.</p>
   </div>
   {% endif %}
 </body>

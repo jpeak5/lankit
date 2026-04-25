@@ -7,6 +7,25 @@
   <span class="subdomain">register.internal</span>
 </header>
 
+{% if request.scheme == 'http' %}
+<div class="card" style="border-color:var(--warn)">
+  <p class="card-title" style="color:var(--warn)">Trust this network</p>
+  <p class="muted" style="margin-bottom:0.75rem">
+    Install the {{ household_name }} network certificate to enable secure
+    connections to all <code>.internal</code> addresses.
+  </p>
+  <a href="/ca.crt" class="btn-primary" style="display:inline-block;padding:0.45rem 1rem;border-radius:8px;color:#fff;background:var(--accent);text-decoration:none;font-size:0.9rem">
+    Download certificate
+  </a>
+  <p class="muted" style="margin-top:0.75rem;font-size:0.8rem">
+    <strong>iOS / iPadOS:</strong> Open the file → Settings → General → VPN &amp; Device Management → install → then General → About → Certificate Trust Settings → enable.<br>
+    <strong>Android:</strong> Open the file → install as CA certificate.<br>
+    <strong>Mac:</strong> Open the file → Keychain Access → double-click → set to Always Trust.<br>
+    <strong>Windows:</strong> Open the file → Install Certificate → Local Machine → Trusted Root.
+  </p>
+</div>
+{% endif %}
+
 <div class="card">
   <p class="card-title">Device</p>
   <div class="stat-row">

@@ -8,7 +8,7 @@
     {% if domain %}
       <p class="muted" style="margin-top:0.3rem">
         You can also reach me.internal at
-        <a href="http://me.{{ domain }}">me.{{ domain }}</a>.
+        <a href="{{ request.scheme }}://me.{{ domain }}">me.{{ domain }}</a>.
       </p>
     {% endif %}
   {% endif %}

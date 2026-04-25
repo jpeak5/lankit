@@ -120,6 +120,10 @@ def provision(config_path, host, tags, check, verbose):
         "lankit_app_server_ip":     app.ip if app and app.enabled else "",
         "household_name":           cfg.household_name,
         "lankit_pihole_password":   vault.get("pihole_password", ""),
+        "lankit_tls_enabled":       _tls_ready(cfg),
+        "lankit_tls_cert":          cfg.tls.cert    if cfg.tls else "",
+        "lankit_tls_key":           cfg.tls.key     if cfg.tls else "",
+        "lankit_tls_ca_cert":       cfg.tls.ca_cert if cfg.tls else "",
     }
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as inv_f:
@@ -196,6 +200,14 @@ def _read_public_key(private_key_path: str) -> str:
     if not pub.exists():
         raise SystemExit(f"SSH public key not found: {pub}")
     return pub.read_text().strip()
+
+
+def _tls_ready(cfg) -> bool:
+    """True only when all three cert files exist on disk."""
+    if not cfg.tls:
+        return False
+    from pathlib import Path
+    return all(Path(p).exists() for p in [cfg.tls.cert, cfg.tls.key, cfg.tls.ca_cert])
 
 
 def _format_extra_vars(d: dict) -> str:
