@@ -439,24 +439,33 @@ def _get_device_list() -> list[dict]:
             dns_names[parts[0]] = parts[1].split(".")[0]
 
     devices = []
-    seen_ips: set[str] = set()
     for d in pihole.network_devices().get("devices", []):
         mac = d.get("hwaddr")
-        for ip_entry in d.get("ips", []):
-            if isinstance(ip_entry, dict):
-                ip = ip_entry.get("ip", "")
-                last_seen = ip_entry.get("lastSeen", 0)
-                pihole_name = ip_entry.get("name", "")
-            else:
-                ip = ip_entry
-                last_seen = 0
-                pihole_name = ""
-            if not ip or ip in seen_ips:
-                continue
-            seen_ips.add(ip)
-            label = dns_names.get(ip) or (pihole_name.split(".")[0] if pihole_name else ip)
-            online = (now - last_seen) < _ONLINE_THRESHOLD_S if last_seen else False
-            devices.append({"ip": ip, "hostname": label, "mac": mac, "online": online})
+        ip_entries = [e for e in d.get("ips", []) if isinstance(e, dict)]
+
+        if not ip_entries:
+            continue
+
+        # One row per device: pick the most recently seen non-link-local IP
+        routable = [e for e in ip_entries if not e.get("ip", "").startswith("fe80")]
+        candidates = routable or ip_entries
+        best = max(candidates, key=lambda e: e.get("lastSeen", 0))
+
+        ip = best.get("ip", "")
+        if not ip:
+            continue
+
+        last_seen = best.get("lastSeen", 0)
+        pihole_name = best.get("name", "")
+
+        # Check all IPs of this device for a user-set DNS name
+        label = next(
+            (dns_names[e["ip"]] for e in ip_entries if e.get("ip") in dns_names),
+            None,
+        ) or (pihole_name.split(".")[0] if pihole_name else ip)
+
+        online = (now - last_seen) < _ONLINE_THRESHOLD_S if last_seen else False
+        devices.append({"ip": ip, "hostname": label, "mac": mac, "online": online})
 
     devices.sort(key=lambda x: (not x["online"], x["hostname"].lower()))
     return devices
