@@ -1,10 +1,12 @@
 import logging
 import re
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
-from flask import Flask, render_template, request
+from flask import Flask, abort, render_template, request
 
 import config
 import db
@@ -25,6 +27,10 @@ BYPASS_GROUP = "lankit-bypass"
 RESERVED_NAMES = {"router", "dns", "apps", "me", "network", "register"}
 HOSTNAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9\-]{0,29}$")
 JOBS_DB = "sqlite:////var/lib/lankit-portal/jobs.db"
+SPEEDTEST_COOLDOWN_S = 15 * 60
+
+_speedtest_running = threading.Event()
+_speedtest_lock = threading.Lock()
 
 
 # ── Startup ───────────────────────────────────────────────────────────────────
@@ -104,6 +110,10 @@ def _ensure_pihole() -> bool:
 
 def _client_ip() -> str:
     return request.headers.get("X-Real-IP") or request.remote_addr
+
+
+def _host_prefix() -> str:
+    return request.host.split(":")[0].split(".")[0]
 
 
 def _bypass_remaining_seconds(job_id: str) -> int | None:
@@ -389,26 +399,271 @@ def me_rename():
         )
 
 
-# ── network.internal stub ─────────────────────────────────────────────────────
+# ── network.internal ──────────────────────────────────────────────────────────
+
+def _latency_data() -> dict:
+    result = {}
+    for target in ["1.1.1.1", "8.8.8.8"]:
+        with db.get_db() as conn:
+            rows = conn.execute(
+                "SELECT rtt_ms, measured_at FROM latency_log "
+                "WHERE target=? ORDER BY id DESC LIMIT 12",
+                (target,),
+            ).fetchall()
+        if not rows:
+            continue
+        valid = [r["rtt_ms"] for r in rows if r["rtt_ms"] is not None]
+        avg = round(sum(valid) / len(valid), 1) if valid else None
+        trend = "stable"
+        if len(valid) >= 8:
+            newer_avg = sum(valid[:4]) / 4
+            older_avg = sum(valid[4:8]) / 4
+            if newer_avg < older_avg * 0.9:
+                trend = "improving"
+            elif newer_avg > older_avg * 1.1:
+                trend = "degrading"
+        result[target] = {"avg": avg, "last_at": rows[0]["measured_at"], "trend": trend}
+    return result
+
+
+def _get_device_list() -> list[dict]:
+    now = time.time()
+    leases = pihole.dhcp_leases().get("leases", [])
+    online_ips = {l["ip"] for l in leases if l.get("expires", 0) > now}
+
+    dns_names = {}
+    for entry in pihole.custom_dns_list():
+        parts = entry.split()
+        if len(parts) == 2:
+            dns_names[parts[0]] = parts[1].split(".")[0]
+
+    devices = []
+    seen_ips: set[str] = set()
+    for d in pihole.network_devices().get("devices", []):
+        ips = d.get("ips", [d.get("ip", "")])
+        if isinstance(ips, str):
+            ips = [ips]
+        mac = d.get("hwaddr") or d.get("mac")
+        for ip in ips:
+            if not ip or ip in seen_ips:
+                continue
+            seen_ips.add(ip)
+            hostname = dns_names.get(ip) or d.get("hostname") or ip
+            devices.append({"ip": ip, "hostname": hostname, "mac": mac, "online": ip in online_ips})
+
+    devices.sort(key=lambda x: (not x["online"], x["hostname"].lower()))
+    return devices
+
+
+def _run_speedtest():
+    import speedtest as st_lib
+    with db.get_db() as conn:
+        row_id = conn.execute(
+            "INSERT INTO speed_results (error) VALUES ('running')"
+        ).lastrowid
+    try:
+        st = st_lib.Speedtest(secure=True)
+        st.get_best_server()
+        st.download()
+        st.upload()
+        r = st.results.dict()
+        with db.get_db() as conn:
+            conn.execute(
+                "UPDATE speed_results SET download_mbps=?, upload_mbps=?, ping_ms=?, error=NULL "
+                "WHERE id=?",
+                (r["download"] / 1e6, r["upload"] / 1e6, r["ping"], row_id),
+            )
+    except Exception as e:
+        with db.get_db() as conn:
+            conn.execute(
+                "UPDATE speed_results SET error=? WHERE id=?",
+                (str(e), row_id),
+            )
+    finally:
+        _speedtest_running.clear()
+
 
 def _network_view():
+    _ensure_pihole()
+    latency = _latency_data()
+    with db.get_db() as conn:
+        last_speed = conn.execute(
+            "SELECT * FROM speed_results WHERE error != 'running' OR error IS NULL "
+            "ORDER BY id DESC LIMIT 1"
+        ).fetchone()
     return render_template(
-        "stub.html",
-        title="network.internal",
-        message="Network dashboard — coming soon.",
+        "network/index.html",
+        latency=latency,
+        last_speed=last_speed,
+        speedtest_running=_speedtest_running.is_set(),
         household_name=config.household_name,
     )
 
 
-# ── register.internal stub ────────────────────────────────────────────────────
+@app.route("/devices")
+def network_devices_fragment():
+    if _host_prefix() != "network":
+        abort(404)
+    _ensure_pihole()
+    devices = []
+    try:
+        devices = _get_device_list()
+    except Exception:
+        log.exception("Failed to build device list")
+    return render_template("network/devices.html", devices=devices)
+
+
+@app.route("/speedtest", methods=["POST"])
+def network_speedtest_trigger():
+    if _host_prefix() != "network":
+        abort(404)
+    with _speedtest_lock:
+        if _speedtest_running.is_set():
+            return render_template(
+                "network/speedtest_status.html",
+                speedtest_running=True, last_speed=None,
+            )
+        with db.get_db() as conn:
+            last = conn.execute(
+                "SELECT measured_at FROM speed_results "
+                "WHERE error != 'running' OR error IS NULL ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        if last:
+            from datetime import datetime
+            last_dt = datetime.fromisoformat(last["measured_at"])
+            age_s = (datetime.utcnow() - last_dt).total_seconds()
+            if age_s < SPEEDTEST_COOLDOWN_S:
+                wait_m = int((SPEEDTEST_COOLDOWN_S - age_s) / 60) + 1
+                with db.get_db() as conn:
+                    last_speed = conn.execute(
+                        "SELECT * FROM speed_results WHERE error != 'running' OR error IS NULL "
+                        "ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+                return render_template(
+                    "network/speedtest_status.html",
+                    speedtest_running=False,
+                    last_speed=last_speed,
+                    cooldown_m=wait_m,
+                )
+        _speedtest_running.set()
+        threading.Thread(target=_run_speedtest, daemon=True).start()
+
+    return render_template(
+        "network/speedtest_status.html",
+        speedtest_running=True, last_speed=None,
+    )
+
+
+@app.route("/speedtest/status")
+def network_speedtest_status():
+    if _host_prefix() != "network":
+        abort(404)
+    with db.get_db() as conn:
+        last_speed = conn.execute(
+            "SELECT * FROM speed_results WHERE error != 'running' OR error IS NULL "
+            "ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    return render_template(
+        "network/speedtest_status.html",
+        speedtest_running=_speedtest_running.is_set(),
+        last_speed=last_speed,
+    )
+
+
+# ── register.internal ─────────────────────────────────────────────────────────
 
 def _register_view():
+    ip = _client_ip()
+    _ensure_pihole()
+    mac = None
+    current_name = None
+    try:
+        mac = pihole.get_mac_for_ip(ip)
+        for entry in pihole.custom_dns_list():
+            parts = entry.split()
+            if len(parts) == 2 and parts[0] == ip:
+                current_name = parts[1].split(".")[0]
+                break
+    except Exception:
+        log.exception("register_view lookup failed for %s", ip)
     return render_template(
-        "stub.html",
-        title="register.internal",
-        message="Device registration — coming soon.",
+        "register/index.html",
+        ip=ip,
+        mac=mac,
+        current_name=current_name,
         household_name=config.household_name,
     )
+
+
+@app.route("/register", methods=["POST"])
+def register_device():
+    if _host_prefix() != "register":
+        abort(404)
+    ip = _client_ip()
+    new_name = (request.form.get("name") or "").strip()
+
+    if not HOSTNAME_RE.match(new_name):
+        return render_template(
+            "register/result.html",
+            error="Invalid name. Use letters, numbers, and hyphens (1–30 chars).",
+        )
+    if new_name.lower() in RESERVED_NAMES:
+        return render_template(
+            "register/result.html",
+            error=f"'{new_name}' is reserved.",
+        )
+
+    try:
+        fqdn = f"{new_name}.{config.internal_domain}"
+        old_fqdn = None
+        for entry in pihole.custom_dns_list():
+            parts = entry.split()
+            if len(parts) != 2:
+                continue
+            entry_ip, entry_domain = parts
+            if entry_ip == ip:
+                old_fqdn = entry_domain
+            elif entry_domain == fqdn:
+                return render_template(
+                    "register/result.html",
+                    error=f"'{new_name}' is already in use by another device.",
+                )
+
+        if old_fqdn and old_fqdn == fqdn:
+            return render_template(
+                "register/result.html",
+                success=True, name=new_name, unchanged=True,
+            )
+
+        if old_fqdn:
+            try:
+                pihole.custom_dns_delete(old_fqdn, ip)
+            except Exception:
+                log.warning("Could not delete old DNS record %s", old_fqdn)
+        pihole.custom_dns_add(fqdn, ip)
+        try:
+            pihole.update_client(ip, {"comment": new_name})
+        except Exception:
+            log.warning("Could not update Pi-hole client comment for %s", ip)
+
+        mac = None
+        try:
+            mac = pihole.get_mac_for_ip(ip)
+        except Exception:
+            pass
+
+        return render_template(
+            "register/result.html",
+            success=True, name=new_name, ip=ip,
+            domain=config.internal_domain,
+        )
+
+    except Exception:
+        log.exception("Registration failed for %s", ip)
+        return render_template(
+            "register/result.html",
+            error="Registration failed — try again.",
+        )
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

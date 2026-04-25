@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}register.internal — {{ household_name }}{% endblock %}
+{% block content %}
+
+<header>
+  <h1>Register this device</h1>
+  <span class="subdomain">register.internal</span>
+</header>
+
+<div class="card">
+  <p class="card-title">Device</p>
+  <div class="stat-row">
+    <span class="stat-label">IP address</span>
+    <span class="stat-value">{{ ip }}</span>
+  </div>
+  {% if mac %}
+  <div class="stat-row">
+    <span class="stat-label">Device identifier</span>
+    <span class="stat-value" style="font-family:monospace;font-size:0.85rem">{{ mac }}</span>
+  </div>
+  {% endif %}
+  {% if current_name %}
+  <div class="stat-row">
+    <span class="stat-label">Current name</span>
+    <span class="stat-value">{{ current_name }}</span>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <p class="card-title">{{ "Change name" if current_name else "Name this device" }}</p>
+  <p class="muted" style="margin-bottom:0.75rem">
+    Give this device a name so the network remembers it.
+    You'll see this name anywhere devices are listed.
+  </p>
+  <form class="inline-form"
+        hx-post="/register"
+        hx-target="#register-result"
+        hx-swap="innerHTML">
+    <input type="text"
+           name="name"
+           value="{{ current_name or '' }}"
+           placeholder="my-device"
+           maxlength="30"
+           autocomplete="off"
+           spellcheck="false">
+    <button type="submit" class="btn-primary">
+      {{ "Update" if current_name else "Register" }}
+    </button>
+  </form>
+  <div id="register-result" style="margin-top:0.5rem"></div>
+  <p class="muted" style="margin-top:0.5rem">Letters, numbers, and hyphens only.</p>
+</div>
+
+{% endblock %}

@@ -1,0 +1,15 @@
+{% if error %}
+  <p class="msg msg-error">{{ error }}</p>
+{% elif success %}
+  {% if unchanged %}
+    <p class="msg msg-success">Already named <strong>{{ name }}</strong> — no change needed.</p>
+  {% else %}
+    <p class="msg msg-success">Done. This device is now known as <strong>{{ name }}</strong>.</p>
+    {% if domain %}
+      <p class="muted" style="margin-top:0.3rem">
+        You can also reach me.internal at
+        <a href="http://me.{{ domain }}">me.{{ domain }}</a>.
+      </p>
+    {% endif %}
+  {% endif %}
+{% endif %}

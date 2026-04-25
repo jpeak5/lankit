@@ -22,11 +22,13 @@
     group: "{{ item.owner }}"
     mode: "{{ item.mode }}"
   loop:
-    - { path: /opt/lankit-portal,              owner: portal, mode: "0755" }
-    - { path: /opt/lankit-portal/templates,    owner: portal, mode: "0755" }
-    - { path: /opt/lankit-portal/templates/me, owner: portal, mode: "0755" }
-    - { path: /var/lib/lankit-portal,          owner: portal, mode: "0750" }
-    - { path: /etc/lankit-portal,              owner: portal, mode: "0750" }
+    - { path: /opt/lankit-portal,                       owner: portal, mode: "0755" }
+    - { path: /opt/lankit-portal/templates,             owner: portal, mode: "0755" }
+    - { path: /opt/lankit-portal/templates/me,          owner: portal, mode: "0755" }
+    - { path: /opt/lankit-portal/templates/register,    owner: portal, mode: "0755" }
+    - { path: /opt/lankit-portal/templates/network,     owner: portal, mode: "0755" }
+    - { path: /var/lib/lankit-portal,                   owner: portal, mode: "0750" }
+    - { path: /etc/lankit-portal,                       owner: portal, mode: "0750" }
 
 # ── Python dependencies ───────────────────────────────────────────────────────
 
@@ -91,6 +93,34 @@
   notify: restart lankit-portal
 
 # ── Systemd unit ──────────────────────────────────────────────────────────────
+
+- name: Deploy cron scripts
+  copy:
+    src: "{{ item }}"
+    dest: "/opt/lankit-portal/{{ item }}"
+    owner: portal
+    group: portal
+    mode: "0755"
+  loop:
+    - cron_latency.py
+    - cron_speedtest.py
+
+- name: Install cron jobs
+  cron:
+    name: "{{ item.name }}"
+    user: portal
+    minute: "{{ item.minute }}"
+    hour: "{{ item.hour | default('*') }}"
+    job: "{{ item.job }}"
+    state: present
+  loop:
+    - name: lankit latency check
+      minute: "*/5"
+      job: /opt/lankit-portal/cron_latency.py >> /var/log/lankit-latency.log 2>&1
+    - name: lankit speedtest
+      minute: "0"
+      hour: "*/6"
+      job: /opt/lankit-portal/cron_speedtest.py >> /var/log/lankit-speedtest.log 2>&1
 
 - name: Deploy systemd unit
   template:
