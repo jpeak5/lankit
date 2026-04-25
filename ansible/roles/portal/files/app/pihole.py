@@ -125,7 +125,7 @@ class PiholeClient:
         pct = round(blocked / total * 100, 1) if total else 0.0
         return {"total": total, "blocked": blocked, "percent_blocked": pct}
 
-    def top_blocked(self, ip: str, count: int = 5) -> list[tuple[str, int]]:
+    def top_blocked(self, ip: str, count: int = 10) -> list[tuple[str, int]]:
         """Return top blocked (domain, count) pairs for a client IP."""
         data = self._get("/queries", params={
             "client_ip": ip,
