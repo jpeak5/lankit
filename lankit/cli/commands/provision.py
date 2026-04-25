@@ -163,6 +163,13 @@ def _privacy_level_int(query_logging: str) -> int:
     return {"full": 0, "anonymous": 1, "none": 3}.get(query_logging, 0)
 
 
+_PORTAL_SUBDOMAINS = {
+    "device":       "me",
+    "network":      "network",
+    "registration": "register",
+}
+
+
 def _build_dns_hosts(cfg) -> list[str]:
     """Build list of 'IP hostname' pairs for Pi-hole local DNS."""
     lines = []
@@ -174,6 +181,12 @@ def _build_dns_hosts(cfg) -> list[str]:
     for name, h in cfg.hosts.items():
         if h.enabled:
             lines.append(f"{h.ip} {h.hostname}.{domain}")
+    # Portal subdomains — each enabled portal gets its own DNS name on app_server
+    app = cfg.hosts.get("app_server")
+    if app and app.enabled:
+        for portal, subdomain in _PORTAL_SUBDOMAINS.items():
+            if cfg.portals.get(portal):
+                lines.append(f"{app.ip} {subdomain}.{domain}")
     return lines
 
 
