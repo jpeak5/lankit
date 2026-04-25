@@ -426,10 +426,11 @@ def _latency_data() -> dict:
     return result
 
 
+_ONLINE_THRESHOLD_S = 30 * 60
+
+
 def _get_device_list() -> list[dict]:
     now = time.time()
-    leases = pihole.dhcp_leases().get("leases", [])
-    online_ips = {l["ip"] for l in leases if l.get("expires", 0) > now}
 
     dns_names = {}
     for entry in pihole.custom_dns_list():
@@ -440,16 +441,22 @@ def _get_device_list() -> list[dict]:
     devices = []
     seen_ips: set[str] = set()
     for d in pihole.network_devices().get("devices", []):
-        ips = d.get("ips", [d.get("ip", "")])
-        if isinstance(ips, str):
-            ips = [ips]
-        mac = d.get("hwaddr") or d.get("mac")
-        for ip in ips:
+        mac = d.get("hwaddr")
+        for ip_entry in d.get("ips", []):
+            if isinstance(ip_entry, dict):
+                ip = ip_entry.get("ip", "")
+                last_seen = ip_entry.get("lastSeen", 0)
+                pihole_name = ip_entry.get("name", "")
+            else:
+                ip = ip_entry
+                last_seen = 0
+                pihole_name = ""
             if not ip or ip in seen_ips:
                 continue
             seen_ips.add(ip)
-            hostname = dns_names.get(ip) or d.get("hostname") or ip
-            devices.append({"ip": ip, "hostname": hostname, "mac": mac, "online": ip in online_ips})
+            label = dns_names.get(ip) or (pihole_name.split(".")[0] if pihole_name else ip)
+            online = (now - last_seen) < _ONLINE_THRESHOLD_S if last_seen else False
+            devices.append({"ip": ip, "hostname": label, "mac": mac, "online": online})
 
     devices.sort(key=lambda x: (not x["online"], x["hostname"].lower()))
     return devices

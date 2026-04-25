@@ -159,9 +159,6 @@ class PiholeClient:
 
     # ── Network ───────────────────────────────────────────────────────────────
 
-    def dhcp_leases(self) -> dict:
-        return self._get("/dhcp/leases")
-
     def network_devices(self) -> dict:
         return self._get("/network/devices")
 
