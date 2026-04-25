@@ -130,7 +130,7 @@ class PiholeClient:
         data = self._get("/queries", params={
             "client_ip": ip,
             "upstream": "blocklist",
-            "count": count * 20,
+            "length": 500,
         })
         domain_counts: dict[str, int] = {}
         for q in data.get("queries", []):
