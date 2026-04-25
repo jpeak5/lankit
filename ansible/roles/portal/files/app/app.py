@@ -139,6 +139,13 @@ def _client_info(ip: str) -> tuple[str | None, str]:
         return mac, hostname
     try:
         mac = pihole.get_mac_for_ip(ip)
+        # DNS records are the canonical name source (set via rename)
+        for entry in pihole.custom_dns_list():
+            parts = entry.split()
+            if len(parts) == 2 and parts[0] == ip:
+                hostname = parts[1].split(".")[0]
+                return mac, hostname
+        # Fall back to Pi-hole client metadata
         data = pihole.get_clients()
         clients = data.get("clients", data) if isinstance(data, dict) else data
         for c in clients:
@@ -175,9 +182,8 @@ def _me_view():
     blocked_domains = []
     blocking = "unknown"
     try:
-        client_data = pihole.client_stats(ip)
-        stats = _parse_client_stats(client_data, ip)
-        blocked_domains = _parse_top_blocked(pihole.top_blocked(ip))
+        stats = pihole.client_stats(ip)
+        blocked_domains = pihole.top_blocked(ip)
         blocking = pihole.dns_blocking().get("blocking", "unknown")
     except Exception:
         log.exception("Pi-hole stats failed for %s", ip)
@@ -322,47 +328,44 @@ def me_rename():
         )
 
     try:
-        data = pihole.get_clients()
-        clients = data.get("clients", data) if isinstance(data, dict) else data
+        fqdn = f"{new_name}.{config.internal_domain}"
 
-        old_name = None
-        for c in clients:
-            if c.get("ip") == ip:
-                old_name = c.get("name") or c.get("hostname")
-                break
+        # DNS records are authoritative: check for collision and find current name
+        old_fqdn = None
+        dns_records = pihole.custom_dns_list()
+        for entry in dns_records:
+            parts = entry.split()
+            if len(parts) != 2:
+                continue
+            entry_ip, entry_domain = parts
+            if entry_ip == ip:
+                old_fqdn = entry_domain
+            elif entry_domain == fqdn:
+                return render_template(
+                    "me/rename_result.html",
+                    error=f"'{new_name}' is already in use by another device.",
+                )
 
-        # Collision check
-        for c in clients:
-            if c.get("ip") != ip:
-                if (c.get("name") or "").lower() == new_name.lower():
-                    return render_template(
-                        "me/rename_result.html",
-                        error=f"'{new_name}' is already in use by another device.",
-                    )
-
-        if old_name and old_name.lower() == new_name.lower():
+        if old_fqdn and old_fqdn == fqdn:
             return render_template(
                 "me/rename_result.html", success=True, name=new_name, unchanged=True
             )
 
-        # Update Pi-hole client display name
-        pihole.update_client(ip, {"name": new_name})
-
-        # Manage custom DNS record: delete old, add new
-        fqdn = f"{new_name}.{config.internal_domain}"
-        dns_data = pihole.custom_dns_list()
-        records = dns_data.get("customdns", dns_data.get("records", []))
-        if isinstance(records, dict):
-            # Might be {"domain": "ip"} mapping
-            records = [{"domain": d, "ip": i} for d, i in records.items()]
-        for rec in records:
-            if rec.get("ip") == ip and rec.get("domain") != fqdn:
-                try:
-                    pihole.custom_dns_delete(rec["domain"], ip)
-                except Exception:
-                    log.warning("Could not delete old DNS record %s", rec["domain"])
+        # Delete old DNS record and add new one
+        if old_fqdn:
+            try:
+                pihole.custom_dns_delete(old_fqdn, ip)
+            except Exception:
+                log.warning("Could not delete old DNS record %s", old_fqdn)
         pihole.custom_dns_add(fqdn, ip)
 
+        # Store name as comment for Pi-hole admin visibility
+        try:
+            pihole.update_client(ip, {"comment": new_name})
+        except Exception:
+            log.warning("Could not update Pi-hole client comment for %s", ip)
+
+        old_name = old_fqdn.split(".")[0] if old_fqdn else None
         mac = None
         try:
             mac = pihole.get_mac_for_ip(ip)
@@ -405,38 +408,6 @@ def _register_view():
         message="Device registration — coming soon.",
         household_name=config.household_name,
     )
-
-
-# ── Pi-hole response parsing ──────────────────────────────────────────────────
-
-def _parse_client_stats(data: dict, ip: str) -> dict:
-    stats = {"total": 0, "blocked": 0, "percent_blocked": 0.0}
-    try:
-        clients = data.get("clients", data) if isinstance(data, dict) else data
-        for c in clients:
-            if c.get("ip") == ip or c.get("name") == ip:
-                stats["total"] = c.get("total", 0)
-                stats["blocked"] = c.get("blocked", 0)
-                if stats["total"]:
-                    stats["percent_blocked"] = round(
-                        stats["blocked"] / stats["total"] * 100, 1
-                    )
-                break
-    except Exception:
-        log.exception("Failed to parse client stats")
-    return stats
-
-
-def _parse_top_blocked(data: dict, count: int = 5) -> list[tuple[str, int]]:
-    try:
-        domains = data.get("top_blocked_domains", data.get("domains", []))
-        if isinstance(domains, dict):
-            return sorted(domains.items(), key=lambda x: x[1], reverse=True)[:count]
-        if isinstance(domains, list):
-            return [(d.get("domain", str(d)), d.get("count", 0)) for d in domains[:count]]
-    except Exception:
-        log.exception("Failed to parse top blocked domains")
-    return []
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

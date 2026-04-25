@@ -1,5 +1,6 @@
 import logging
 import threading
+from urllib.parse import quote
 
 import requests
 
@@ -57,6 +58,19 @@ class PiholeClient:
             r.raise_for_status()
             return r.json()
 
+    def _put(self, path: str, data: dict | None = None):
+        with self._lock:
+            r = requests.put(
+                f"{self.base}{path}", json=data, headers=self._headers(), timeout=5
+            )
+            if r.status_code == 401:
+                self._authenticate()
+                r = requests.put(
+                    f"{self.base}{path}", json=data, headers=self._headers(), timeout=5
+                )
+            r.raise_for_status()
+            return r.json() if r.content else {}
+
     def _patch(self, path: str, data: dict):
         with self._lock:
             r = requests.patch(
@@ -95,27 +109,53 @@ class PiholeClient:
         return self._get("/stats/summary")
 
     def client_stats(self, ip: str) -> dict:
-        return self._get("/stats/clients", params={"clients": ip})
+        """Return {total, blocked, percent_blocked} for a specific client IP."""
+        total = 0
+        blocked = 0
+        data = self._get("/stats/top_clients", params={"count": 500})
+        for c in data.get("clients", []):
+            if c.get("ip") == ip:
+                total = c.get("count", 0)
+                break
+        data_blocked = self._get("/stats/top_clients", params={"count": 500, "blocked": "true"})
+        for c in data_blocked.get("clients", []):
+            if c.get("ip") == ip:
+                blocked = c.get("count", 0)
+                break
+        pct = round(blocked / total * 100, 1) if total else 0.0
+        return {"total": total, "blocked": blocked, "percent_blocked": pct}
 
-    def top_blocked(self, ip: str, count: int = 5) -> dict:
-        return self._get(
-            "/stats/top_blocked_domains",
-            params={"blocked": "true", "client": ip, "count": count},
-        )
+    def top_blocked(self, ip: str, count: int = 5) -> list[tuple[str, int]]:
+        """Return top blocked (domain, count) pairs for a client IP."""
+        data = self._get("/queries", params={
+            "client_ip": ip,
+            "upstream": "blocklist",
+            "count": count * 20,
+        })
+        domain_counts: dict[str, int] = {}
+        for q in data.get("queries", []):
+            d = q.get("domain") or ""
+            if d and d != "hidden":
+                domain_counts[d] = domain_counts.get(d, 0) + 1
+        return sorted(domain_counts.items(), key=lambda x: x[1], reverse=True)[:count]
 
     # ── DNS ───────────────────────────────────────────────────────────────────
 
     def dns_blocking(self) -> dict:
         return self._get("/dns/blocking")
 
-    def custom_dns_list(self) -> dict:
-        return self._get("/customdns/records")
+    def custom_dns_list(self) -> list[str]:
+        """Return current local DNS host entries as ['IP hostname', ...]."""
+        data = self._get("/config/dns/hosts")
+        return data.get("config", {}).get("dns", {}).get("hosts", [])
 
     def custom_dns_add(self, domain: str, ip: str) -> dict:
-        return self._post("/customdns/records", {"domain": domain, "ip": ip})
+        entry = quote(f"{ip} {domain}", safe="")
+        return self._put(f"/config/dns/hosts/{entry}")
 
     def custom_dns_delete(self, domain: str, ip: str) -> dict:
-        return self._delete("/customdns/records", {"domain": domain, "ip": ip})
+        entry = quote(f"{ip} {domain}", safe="")
+        return self._delete(f"/config/dns/hosts/{entry}")
 
     # ── Network ───────────────────────────────────────────────────────────────
 
@@ -125,8 +165,8 @@ class PiholeClient:
     def get_clients(self) -> dict:
         return self._get("/clients")
 
-    def update_client(self, client_id: str, data: dict) -> dict:
-        return self._patch(f"/clients/{client_id}", data)
+    def update_client(self, client_ip: str, data: dict) -> dict:
+        return self._put(f"/clients/ip-{client_ip}", data)
 
     # ── Groups ────────────────────────────────────────────────────────────────
 
@@ -137,7 +177,7 @@ class PiholeClient:
         return self._post("/groups", {"name": name, "comment": comment})
 
     def set_client_groups(self, client_ip: str, group_ids: list[int]) -> dict:
-        return self._patch(f"/clients/{client_ip}", {"groups": group_ids})
+        return self._put(f"/clients/ip-{client_ip}", {"groups": group_ids})
 
     # ── Convenience ───────────────────────────────────────────────────────────
 
