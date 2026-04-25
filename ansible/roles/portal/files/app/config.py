@@ -9,3 +9,4 @@ pihole_url: str = _c["pihole"]["url"]
 pihole_password: str = _c["pihole"]["password"]
 household_name: str = _c.get("portal", {}).get("household_name", "Home")
 internal_domain: str = _c.get("portal", {}).get("internal_domain", "internal")
+query_privacy_level: int = _c.get("portal", {}).get("query_privacy_level", 0)

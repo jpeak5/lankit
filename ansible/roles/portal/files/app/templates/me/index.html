@@ -32,7 +32,11 @@
       {% endfor %}
     </ul>
   {% elif stats %}
-    <p class="muted" style="margin-top:0.75rem">No blocked domains recorded for this device.</p>
+    {% if privacy_hidden %}
+      <p class="muted" style="margin-top:0.75rem">Domain names are hidden by your privacy settings (<code>query_logging: anonymous</code>). Set <code>query_logging: full</code> in network.yml and re-provision to see blocked domains.</p>
+    {% else %}
+      <p class="muted" style="margin-top:0.75rem">No blocked domains recorded for this device.</p>
+    {% endif %}
   {% endif %}
 </div>
 

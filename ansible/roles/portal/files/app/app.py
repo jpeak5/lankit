@@ -209,6 +209,7 @@ def _me_view():
         bypass_active=bypass_seconds is not None,
         history=history,
         household_name=config.household_name,
+        privacy_hidden=config.query_privacy_level > 0 and not blocked_domains and bool(stats.get("blocked")),
     )
 
 
