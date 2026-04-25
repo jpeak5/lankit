@@ -1,32 +1,130 @@
 ---
-# portal role — deploys lankit portal pages to /var/www/lankit-portal/
-# Caddy (caddy role) serves these files. This role owns the content;
-# the caddy role owns the server config.
-#
-# Current state: placeholder HTML. The portal app (dynamic device info,
-# self-service controls) is tracked in the issue queue.
+# portal role — deploys the lankit Flask portal to /opt/lankit-portal/
+# Caddy (caddy role) reverse-proxies to port 5000.
 
-- name: Deploy me portal page
+# ── System user ───────────────────────────────────────────────────────────────
+
+- name: Create portal system user
+  user:
+    name: portal
+    system: true
+    shell: /usr/sbin/nologin
+    home: /opt/lankit-portal
+    create_home: false
+
+# ── Directories ───────────────────────────────────────────────────────────────
+
+- name: Create portal directories
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /opt/lankit-portal,              owner: portal, mode: "0755" }
+    - { path: /opt/lankit-portal/templates,    owner: portal, mode: "0755" }
+    - { path: /opt/lankit-portal/templates/me, owner: portal, mode: "0755" }
+    - { path: /var/lib/lankit-portal,          owner: portal, mode: "0750" }
+    - { path: /etc/lankit-portal,              owner: portal, mode: "0750" }
+
+# ── Python dependencies ───────────────────────────────────────────────────────
+
+- name: Install Python venv support
+  apt:
+    name: [python3-venv, python3-pip]
+    state: present
+
+- name: Create virtualenv
+  command: python3 -m venv /opt/lankit-portal/venv
+  args:
+    creates: /opt/lankit-portal/venv/bin/python
+
+- name: Copy requirements.txt
+  copy:
+    src: app/requirements.txt
+    dest: /opt/lankit-portal/requirements.txt
+    owner: portal
+    group: portal
+    mode: "0644"
+  notify: restart lankit-portal
+
+- name: Install Python dependencies
+  pip:
+    requirements: /opt/lankit-portal/requirements.txt
+    virtualenv: /opt/lankit-portal/venv
+
+# ── App source ────────────────────────────────────────────────────────────────
+
+- name: Deploy app modules
+  copy:
+    src: "app/{{ item }}"
+    dest: "/opt/lankit-portal/{{ item }}"
+    owner: portal
+    group: portal
+    mode: "0644"
+  loop:
+    - app.py
+    - pihole.py
+    - db.py
+    - config.py
+  notify: restart lankit-portal
+
+- name: Deploy templates
+  copy:
+    src: app/templates/
+    dest: /opt/lankit-portal/templates/
+    owner: portal
+    group: portal
+    mode: "0644"
+  notify: restart lankit-portal
+
+# ── Config ────────────────────────────────────────────────────────────────────
+
+- name: Deploy portal config
   template:
-    src: me.html.j2
-    dest: /var/www/lankit-portal/me/index.html
+    src: config.toml.j2
+    dest: /etc/lankit-portal/config.toml
+    owner: portal
+    group: portal
+    mode: "0600"
+  notify: restart lankit-portal
+
+# ── Systemd unit ──────────────────────────────────────────────────────────────
+
+- name: Deploy systemd unit
+  template:
+    src: lankit-portal.service.j2
+    dest: /etc/systemd/system/lankit-portal.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - systemd reload
+    - restart lankit-portal
+
+- name: Enable and start lankit-portal
+  systemd:
+    name: lankit-portal
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# ── Static apps.internal page (v1) ───────────────────────────────────────────
+# apps.internal serves static HTML until Flask v2 is implemented.
+
+- name: Create apps document root
+  file:
+    path: /var/www/lankit-portal/apps
+    state: directory
     owner: caddy
     group: caddy
-    mode: "0644"
+    mode: "0755"
 
 - name: Deploy apps landing page
   template:
     src: apps.html.j2
     dest: /var/www/lankit-portal/apps/index.html
-    owner: caddy
-    group: caddy
-    mode: "0644"
-
-- name: Deploy registration portal page
-  when: lankit_portals.get('registration', false)
-  template:
-    src: register.html.j2
-    dest: /var/www/lankit-portal/register/index.html
     owner: caddy
     group: caddy
     mode: "0644"

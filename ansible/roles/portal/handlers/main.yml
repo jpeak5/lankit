@@ -1,0 +1,9 @@
+---
+- name: systemd reload
+  systemd:
+    daemon_reload: true
+
+- name: restart lankit-portal
+  systemd:
+    name: lankit-portal
+    state: restarted

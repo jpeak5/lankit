@@ -5,22 +5,31 @@
     admin localhost:2019
 }
 
-# Self-service device portal — reachable from all segments
+# Self-service device portal — Flask app, all segments
 http://me.{{ lankit_internal_domain }} {
-    root * /var/www/lankit-portal/me
-    file_server
+    reverse_proxy localhost:5000 {
+        header_up X-Real-IP {remote_host}
+    }
 }
 
-# App server landing page
+# Network dashboard — Flask app
+http://network.{{ lankit_internal_domain }} {
+    reverse_proxy localhost:5000 {
+        header_up X-Real-IP {remote_host}
+    }
+}
+
+# App server landing page — static HTML (v1)
 http://apps.{{ lankit_internal_domain }} {
     root * /var/www/lankit-portal/apps
     file_server
 }
 
 {% if lankit_portals.get('registration') %}
-# Device registration portal
+# Device registration portal — Flask app
 http://register.{{ lankit_internal_domain }} {
-    root * /var/www/lankit-portal/register
-    file_server
+    reverse_proxy localhost:5000 {
+        header_up X-Real-IP {remote_host}
+    }
 }
 {% endif %}

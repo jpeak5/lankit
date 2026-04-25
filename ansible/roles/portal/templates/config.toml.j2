@@ -1,0 +1,13 @@
+# lankit portal config — managed by lankit provision
+# Do not edit directly
+
+[pihole]
+url = "http://{{ lankit_dns_server_ip }}:8081"
+# lankit_pihole_password must be set in your Ansible vault (wifi-vault.yml or
+# a separate portal-vault.yml).  Run: ansible-vault edit wifi-vault.yml
+# and add:  lankit_pihole_password: "<your Pi-hole admin password>"
+password = "{{ lankit_pihole_password }}"
+
+[portal]
+household_name = "{{ household_name }}"
+internal_domain = "{{ lankit_internal_domain }}"

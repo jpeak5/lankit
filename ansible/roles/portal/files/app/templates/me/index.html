@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}me.internal — {{ household_name }}{% endblock %}
+{% block content %}
+
+<header>
+  <h1>{{ hostname if hostname != ip else ip }}</h1>
+  <span class="subdomain">me.internal</span>
+</header>
+<p class="muted" style="margin-bottom:1rem">Showing stats for this device ({{ ip }}).</p>
+
+{# ── Stats ─────────────────────────────────────────────────────────────── #}
+<div class="card">
+  <p class="card-title">Last 24 hours</p>
+  {% if stats %}
+    <div class="stat-row">
+      <span class="stat-label">Queries</span>
+      <span class="stat-value">{{ stats.total | default(0) }}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Blocked</span>
+      <span class="stat-value">{{ stats.blocked | default(0) }} ({{ stats.percent_blocked | default(0) }}%)</span>
+    </div>
+  {% else %}
+    <p class="muted">Stats unavailable.</p>
+  {% endif %}
+
+  {% if blocked_domains %}
+    <details style="margin-top:0.75rem">
+      <summary class="muted">Top blocked domains</summary>
+      <ul class="plain" style="margin-top:0.5rem">
+        {% for domain, count in blocked_domains %}
+          <li>{{ domain }} <span style="float:right">{{ count }}</span></li>
+        {% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+</div>
+
+{# ── Ad blocking ───────────────────────────────────────────────────────── #}
+<div class="card">
+  <p class="card-title">Ad blocking</p>
+  <div id="blocking"
+       hx-get="/status"
+       hx-trigger="every 10s"
+       hx-swap="innerHTML">
+    {% include "me/status.html" %}
+  </div>
+</div>
+
+{# ── Rename ────────────────────────────────────────────────────────────── #}
+<div class="card">
+  <p class="card-title">Device name</p>
+  <form class="inline-form"
+        hx-post="/rename"
+        hx-target="#rename-result"
+        hx-swap="innerHTML">
+    <input type="text"
+           name="name"
+           value="{{ hostname if hostname != ip else '' }}"
+           placeholder="device-name"
+           maxlength="30"
+           autocomplete="off"
+           spellcheck="false">
+    <button type="submit" class="btn-ghost">Rename</button>
+  </form>
+  <div id="rename-result" style="margin-top:0.4rem"></div>
+  <p class="muted" style="margin-top:0.5rem">
+    Letters, numbers, hyphens. Sets your hostname on the local network.
+  </p>
+</div>
+
+{# ── History ───────────────────────────────────────────────────────────── #}
+{% if history %}
+  <div class="card">
+    <details>
+      <summary class="card-title" style="display:list-item">Bypass history</summary>
+      <ul class="plain" style="margin-top:0.5rem">
+        {% for row in history %}
+          <li>
+            {{ row.started_at[:16] }} —
+            {{ row.duration_m }} min
+            {% if row.cancelled %}<span class="muted">(cancelled)</span>
+            {% elif row.ended_at %}<span class="muted">(ended)</span>
+            {% else %}<span style="color:var(--warn)">active</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </details>
+  </div>
+{% endif %}
+
+{% endblock %}

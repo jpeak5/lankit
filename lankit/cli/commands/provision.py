@@ -33,12 +33,23 @@ def provision(config_path, host, tags, check, verbose):
       lankit provision --tags pihole
       lankit provision --check
     """
+    import shutil
     import subprocess
+    import sys
     import tempfile
     import os
     from lankit.core.config import load, ConfigError
     from pathlib import Path
     from rich.console import Console
+
+    def _find_bin(name: str) -> str:
+        venv_bin = Path(sys.executable).parent / name
+        if venv_bin.exists():
+            return str(venv_bin)
+        found = shutil.which(name)
+        if found:
+            return found
+        raise SystemExit(f"{name} not found — is ansible-core installed?")
 
     console = Console()
 
@@ -47,6 +58,9 @@ def provision(config_path, host, tags, check, verbose):
     except ConfigError as e:
         console.print(f"[bold red]Config error:[/bold red] {e}")
         raise SystemExit(1)
+
+    from lankit.core.passwords import read_vault
+    vault = read_vault()
 
     # Ansible dirs relative to cwd (lankit repo root)
     ansible_dir = Path("ansible")
@@ -68,7 +82,9 @@ def provision(config_path, host, tags, check, verbose):
     ssh_key = str(Path(cfg.ssh_key).expanduser())
     groups: dict[str, dict] = {}  # group → {host_name: Host}
     for name, h in cfg.hosts.items():
-        if not h.enabled:
+        # --host flag overrides the enabled guard (allows provisioning a host
+        # that is still marked enabled: false while being set up for the first time)
+        if not h.enabled and name != host:
             continue
         if host and name != host:
             continue
@@ -103,6 +119,7 @@ def provision(config_path, host, tags, check, verbose):
         "lankit_portals":           cfg.portals,
         "lankit_app_server_ip":     app.ip if app and app.enabled else "",
         "household_name":           cfg.household_name,
+        "lankit_pihole_password":   vault.get("pihole_password", ""),
     }
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as inv_f:
@@ -111,7 +128,7 @@ def provision(config_path, host, tags, check, verbose):
 
     try:
         cmd = [
-            "ansible-playbook",
+            _find_bin("ansible-playbook"),
             str(playbook),
             "-i", inv_path,
             "--extra-vars", _format_extra_vars(extra_vars),
