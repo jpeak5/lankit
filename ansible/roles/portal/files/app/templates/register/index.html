@@ -21,7 +21,8 @@
     <strong>iOS / iPadOS:</strong> Open the file → Settings → General → VPN &amp; Device Management → install → then General → About → Certificate Trust Settings → enable.<br>
     <strong>Android:</strong> Open the file → install as CA certificate.<br>
     <strong>Mac:</strong> Open the file → Keychain Access → double-click → set to Always Trust.<br>
-    <strong>Windows:</strong> Open the file → Install Certificate → Local Machine → Trusted Root.
+    <strong>Windows:</strong> Open the file → Install Certificate → Local Machine → Trusted Root.<br>
+    <strong>Linux:</strong> <code>sudo cp ca.crt /usr/local/share/ca-certificates/lankit.crt &amp;&amp; sudo update-ca-certificates</code> — then restart your browser. Firefox: Settings → Privacy &amp; Security → Certificates → View Certificates → Authorities → Import.
   </p>
 </div>
 {% endif %}
