@@ -157,7 +157,7 @@ def load(path: Optional[Path] = None) -> Config:
     _validate_schema(raw, config_path)
     raw = _resolve_templates(raw)
     _validate_cross_references(raw)
-    return _build_config(raw)
+    return _build_config(raw, config_path)
 
 
 def _resolve_path(path: Optional[Path]) -> Path:
@@ -268,7 +268,7 @@ def _validate_cross_references(raw: dict) -> None:
         raise ConfigError("Cross-reference errors in network.yml:\n" + "\n".join(errors))
 
 
-def _build_config(raw: dict) -> Config:
+def _build_config(raw: dict, config_path: Optional[Path] = None) -> Config:
     segments = {
         name: Segment(name=name, **{
             k: v for k, v in seg.items()
@@ -317,12 +317,12 @@ def _build_config(raw: dict) -> Config:
 
     tls = None
     if tls_raw := raw.get("tls"):
-        config_dir = Path(os.environ.get("LANKIT_CONFIG", "network.yml")).parent
+        config_dir = (config_path.parent if config_path else Path.cwd()).resolve()
         def _resolve_tls_path(p: str) -> str:
             resolved = Path(p).expanduser()
             if not resolved.is_absolute():
                 resolved = config_dir / resolved
-            return str(resolved)
+            return str(resolved.resolve())
         tls = TLS(
             cert=_resolve_tls_path(tls_raw["cert"]),
             key=_resolve_tls_path(tls_raw["key"]),

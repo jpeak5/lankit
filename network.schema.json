@@ -101,6 +101,17 @@
       "additionalProperties": { "$ref": "#/$defs/portal" }
     },
 
+    "tls": {
+      "type": "object",
+      "required": ["cert", "key", "ca_cert"],
+      "additionalProperties": false,
+      "properties": {
+        "cert":    { "type": "string" },
+        "key":     { "type": "string" },
+        "ca_cert": { "type": "string" }
+      }
+    },
+
     "router": {
       "type": "object",
       "required": ["ip", "ssh_user", "ssh_key", "wan_interface", "lan_interface"],

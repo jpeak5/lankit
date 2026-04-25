@@ -1,6 +1,6 @@
 ---
 # caddy role — installs Caddy and configures reverse proxy / static file serving
-# for lankit portals. TLS is deferred; all sites served over HTTP for now.
+# for lankit portals.
 
 # ── Bootstrap ────────────────────────────────────────────────────────────────
 
@@ -70,6 +70,30 @@
     owner: root
     group: root
     mode: "0644"
+  notify: restart caddy
+
+# ── TLS certificates (must exist before Caddy starts) ─────────────────────────
+
+- name: Create TLS directory
+  file:
+    path: /etc/lankit-portal/tls
+    state: directory
+    owner: caddy
+    group: caddy
+    mode: "0750"
+  when: lankit_tls_enabled | default(false)
+
+- name: Deploy TLS cert and key
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: caddy
+    group: caddy
+    mode: "{{ item.mode }}"
+  loop:
+    - { src: "{{ lankit_tls_cert }}", dest: /etc/lankit-portal/tls/cert.pem,  mode: "0644" }
+    - { src: "{{ lankit_tls_key }}",  dest: /etc/lankit-portal/tls/key.pem,   mode: "0600" }
+  when: lankit_tls_enabled | default(false)
   notify: restart caddy
 
 # ── Service ───────────────────────────────────────────────────────────────────
