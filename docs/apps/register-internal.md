@@ -2,105 +2,97 @@
 
 ## Purpose
 
-Lets household members claim and name their devices — particularly important
-for Apple devices using MAC randomization, which would otherwise appear as a
-new unknown device on every connection.
+Lets household members name their devices — particularly important for devices using MAC
+address randomization, which would otherwise appear as a new unknown device on every
+reconnection. In v2, serves as the portal a quarantined device is directed to when it
+first connects.
 
-This is the portal a device is directed to when it lands in quarantine.
-It is also useful from any segment: name your device before network admin
-has to figure out what "iPhone (2)" is.
+## Discovery
 
-## No prior art
+**v1:** Any device that knows to visit `register.internal` can register. No automatic
+redirection.
 
-`register.internal` is new. There is no equivalent in
-`~/Documents/code/network/portal/`. The rename functionality in `me.internal`
-handles the name→DNS mapping, but registration is a different flow:
+**v2:** Quarantined devices must be able to discover this portal without prior knowledge.
+The mechanism is a captive-portal DNS redirect: all DNS queries from the quarantine segment
+resolve to app_server. The browser's captive portal detection (present on iOS, Android,
+Windows, macOS) will open register.internal automatically on connection. This requires a
+specific dnsmasq rule on dns_server, deployed by Ansible, that is active only for the
+quarantine segment's IP range.
 
-- **Rename** (me.internal): you already have full access, you want to name yourself
-- **Register** (register.internal): you may be quarantined or new; you want to
-  identify yourself and request placement on the network
-
-## v1 scope (pre-VLAN enforcement)
-
-With all eight VLANs defined but VLAN-based quarantine not fully enforced for
-all device types, v1 keeps it simple:
-
-1. Device visits `register.internal` from any segment
-2. Sees its MAC address, current IP, and current name (if any)
-3. Enters a friendly name
-4. Name is pinned: DHCP lease comment updated on router, DNS record added to Pi-hole
-5. Confirmation shown
-
-This is identical to the rename flow in `me.internal`, surfaced as a standalone
-page with cleaner copy aimed at non-technical users ("What should we call your device?").
-
-## v2 scope (post-VLAN enforcement, quarantine active)
-
-When a device in quarantine visits `register.internal`:
-
-1. Shows: "Your device isn't recognized yet. Give it a name to request access."
-2. User enters name + optionally selects intended use (personal device / work / IoT)
-3. Submission creates a pending registration record
-4. Admin reviews in Pi-hole or via `lankit` CLI
-5. On approval: DHCP static reservation created, device moved to appropriate segment
-6. Device notified (page auto-polls; shows "You're all set" when approved)
-
-v2 requires a persistent approval queue (SQLite table) and a `lankit register approve`
-CLI command or dashboard integration.
+This is the critical path for v2. Do not ship quarantine enforcement without it.
 
 ## Routes
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Registration page |
-| `POST` | `/register` | Submit name; returns success or validation error |
-| `GET` | `/status` | JSON: registration state for this device (pending/approved/none) |
+| `POST` | `/register` | Submit name; returns updated page or validation error |
+| `GET` | `/status` | HTML fragment: registration state for this MAC (HTMX target) |
 
 ## Page: GET /
 
-**Pre-approval view:**
-- "What should we call your device?"
-- Shows current MAC, IP, current name (if any)
-- Name input (same validation as rename: alphanumeric + hyphens, 1-30 chars)
-- Submit button: "Register this device"
+Shows: current IP, device identifier (MAC), current name if any.
 
-**Post-submission view (v1):**
-- "Done. Your device is now known as `<name>`."
+**Pre-submission:**
+- "What should we call your device?"
+- Name input (alphanumeric + hyphens, 1–30 chars)
+- Submit: "Register this device"
+
+**Post-submission (v1 — immediate):**
+- "Done. This device is now known as `<name>`."
 - Link to me.internal
 
-**Post-submission view (v2, pending approval):**
-- "Got it. Once your device is approved, you'll be connected automatically."
-- Auto-polls `/status`; reloads when state changes to `approved`
+**Post-submission (v2 — pending approval):**
+- "Got it. Your device will be connected once it's approved."
+- HTMX polls `/status` every 15 seconds. When status changes to `approved`, page reloads.
+- After 10 minutes of polling with no approval: show "Still waiting? Contact [household_name]
+  network admin." Polling stops.
 
-## Data model
+## v1 scope
 
-```sql
--- v1: just the rename log (shared with me.internal)
+1. Device visits register.internal from any segment
+2. Sees its MAC, current IP, and current name (if any)
+3. Enters a name
+4. Name is applied immediately: DNS record added to Pi-hole, DHCP lease comment updated
+5. Confirmation shown
 
--- v2 addition:
-CREATE TABLE registrations (
-    id INTEGER PRIMARY KEY,
-    mac TEXT NOT NULL,
-    ip TEXT NOT NULL,
-    requested_name TEXT NOT NULL,
-    requested_segment TEXT,          -- optional: user's stated intent
-    status TEXT NOT NULL DEFAULT 'pending',  -- pending | approved | rejected
-    submitted_at TEXT NOT NULL,
-    reviewed_at TEXT,
-    reviewed_by TEXT                 -- "admin" or future: specific user
-);
+v1 auto-approves on submission. No approval queue.
+
+## v2 scope (quarantine active)
+
+1. Quarantined device is redirected to register.internal by captive portal DNS
+2. User names the device and optionally indicates intended use (personal / work / IoT)
+3. Submission creates a `registrations` row with `status='pending'`
+4. Admin reviews and approves (via `lankit register approve <mac>` CLI or dashboard)
+5. On approval: DHCP static reservation created on router, device moved to appropriate segment
+6. Page detects approval via HTMX polling and shows confirmation
+
+## MAC retrieval
+
+MAC address is looked up from the requesting client IP via `GET /api/network/devices` on
+the Pi-hole API. See `architecture.md` for the lookup pattern. The result is cached; cache
+is invalidated on registration or rename.
+
+The MAC shown to the user is the network-specific MAC. On devices using per-network MAC
+randomization (Apple, Android), this MAC is stable for this network but differs on other
+networks. The UI label is "Device identifier" — not "MAC address."
+
+## Idempotence
+
+- If the requesting MAC already has an approved registration with the same name, return
+  the confirmation view without inserting.
+- If already pending: return the pending view, do not insert a second row.
+- The DHCP static reservation on the router uses the check-then-add pattern:
+
+```
+:if ([/ip dhcp-server lease find mac-address="<mac>"] = "") do={
+    /ip dhcp-server lease add mac-address="<mac>" address=<ip> server=dhcp1 comment=<name>
+} else={
+    /ip dhcp-server lease set [find mac-address="<mac>"] comment=<name>
+}
 ```
 
 ## Copy tone
 
-Non-technical. Avoid "MAC address" in primary text (show it but label it
-"Device identifier"). Avoid "VLAN", "segment", "DHCP". Use: "recognized",
-"connected", "your device."
-
-## Open questions
-
-- Should register.internal be reachable from quarantine? Post-VLAN, quarantine
-  has `internet: none` — the firewall would need a specific rule permitting
-  quarantine → app_server:80. Add as a post-VLAN firewall rule.
-- Should approved registrations auto-approve on name submission (v1 mode) or
-  require explicit admin action? v1: auto-approve. v2: explicit.
+Non-technical. Do not use: "MAC address," "VLAN," "segment," "DHCP," "quarantine."
+Use: "device identifier," "recognized," "connected," "your network."

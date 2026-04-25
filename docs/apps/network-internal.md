@@ -2,45 +2,58 @@
 
 ## Purpose
 
-Read-only view of network health for trusted household members. Answers:
-is the internet working, what devices are online, and are we getting what
-we pay for. Not an admin tool — no controls except "run a speed test."
-
-## Prior art
-
-`~/Documents/code/network/portal/app.py` + `templates/network.html` implements
-this. The port is the same data access translation as `me.internal`:
-
-- Direct SQLite → Pi-hole API for device list and blocking status
-- Router SSH calls → kept as-is (`ssh_router()` function in prior art works)
-- Speed test cron → kept as cron on app_server; results stored in local SQLite
-- Latency monitoring cron → kept as cron on app_server
-- `threading.Thread` for async speed test → kept as-is or replace with APScheduler
-
-Estimated delta: light. The network dashboard is mostly read-only data
-aggregation; the only write path is the speed test trigger.
+Read-only view of network health for household members. Answers: is the internet working,
+what devices are online, and are we getting what we pay for. One write action: trigger a
+speed test.
 
 ## Routes
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Dashboard (served when Host: network.internal) |
-| `GET` | `/devices` | JSON: all devices with online status |
-| `POST` | `/speedtest` | Trigger on-demand speed test (rate-limited) |
-| `GET` | `/speedtest/status` | JSON: running / done / error |
+| `GET` | `/devices` | HTML fragment: device list (HTMX target) |
+| `POST` | `/speedtest` | Trigger on-demand speed test (rate-limited: 1 per 15 min) |
+| `GET` | `/speedtest/status` | HTML fragment: running / last result (HTMX target) |
 
 ## Page sections
 
-**Internet status** — WAN up/down, public IP, router uptime (via SSH to router).
+**Internet status** — WAN up/down, public IP, router uptime. Sourced via SSH to router.
+Cached; "last checked X minutes ago" shown beside each indicator.
 
-**Latency** — rolling average to 1.1.1.1 and 8.8.8.8, collected by cron every
-5 minutes, stored in local SQLite.
+**Latency** — rolling average RTT to two public resolvers, collected by cron every 5 minutes,
+stored in `latency_log`. Shows current average and a simple text trend (stable / improving /
+degrading based on last 12 samples). No sparkline in v1.
 
-**Speed test** — last result, time since tested, 7-day sparkline. "Run now"
-button rate-limited to 1 per 15 minutes.
+**Speed test** — last result (down/up/ping), time since tested, "Run now" button.
+Status updates via HTMX polling (`hx-get="/speedtest/status" hx-trigger="every 3s"`) while
+a test is running; polling stops when result arrives.
 
-**Devices** — all Pi-hole clients: hostname, IP, online/offline (last query
-within 15 min), first seen. Post-VLAN: grouped by segment.
+**Devices** — all Pi-hole clients: hostname, IP, online/offline, first seen.
+Post-VLAN: grouped by segment.
+
+## Device online/offline
+
+Online/offline is determined by polling the router's DHCP lease table via SSH, not by
+DNS query recency. A device is online if it holds an active DHCP lease. This is reliable
+for devices that make no DNS queries (IoT sensors, smart bulbs, etc.).
+
+```
+/ip dhcp-server lease print where status=bound
+```
+
+Cache this result and refresh every 60 seconds via the latency cron job (or its own cron).
+
+## Traffic accounting
+
+RouterOS `/ip accounting` maintains a running tally of byte counts per IP pair — a traffic
+ledger of who sent how many bytes to whom since the last snapshot. It answers per-device
+bandwidth questions, but requires external polling and accumulation: the router stores only
+the current running totals, not history. If you don't poll it on a regular interval and
+write results to local SQLite, the data is gone.
+
+This feature is deferred from v1. It is not enabled by default on the router, and the
+polling infrastructure (cron + SSH + SQLite accumulation) adds meaningful complexity for
+uncertain payoff at household scale. Omit the bandwidth/usage section entirely from v1.
 
 ## Cron jobs (deployed by Ansible to app_server)
 
@@ -49,27 +62,17 @@ within 15 min), first seen. Post-VLAN: grouped by segment.
 0 */6 * * *   /opt/lankit-portal/cron_speedtest.sh
 ```
 
-Prior art has working versions of both scripts in
-`~/Documents/code/network/portal/`. Port directly; update paths.
-
-## Rollback button
-
-Prior art includes a `/rollback` route on `network.internal` that triggers
-`rollback.sh` via subprocess. In lankit, `lankit rollback` handles this from
-the admin machine. **Omit the rollback button from the lankit port.** It adds
-attack surface and duplicates a CLI command. If you lose WiFi and need to
-rollback from a phone, that's what the printed rollback card is for.
+Both scripts append to `latency_log` and `speed_results` respectively. Each run writes a
+`measured_at` timestamp; the dashboard shows this timestamp alongside cached data so a
+stale cron is visible rather than silent.
 
 ## Access control
 
-Pre-VLAN: any device can reach network.internal. No sensitive data (no query
-logs, no browsing history).
-Post-VLAN: guest segment sees internet status + speed test only, not device
-list or bandwidth. IoT and quarantine: no access.
+Enforced at the firewall:
+- trusted, work: full access
+- guest: internet status + speed test only; device list is suppressed. The guest view is
+  a distinct page layout (not hidden sections) — a guest landing on network.internal sees
+  a two-section page, not a broken-looking full page with gaps.
+- iot, quarantine: no access
 
-## Open questions
-
-- MikroTik IP accounting (`/ip/accounting`) for per-device bandwidth: is it
-  currently enabled on the router? Check with `ssh admin@192.168.88.1 "/ip accounting print"`.
-  If not enabled, bandwidth data is unavailable for v1. Acceptable — omit the
-  usage page from v1 scope.
+Public IP is suppressed in the guest view.

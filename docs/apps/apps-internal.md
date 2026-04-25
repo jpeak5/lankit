@@ -2,46 +2,41 @@
 
 ## Purpose
 
-Landing page. Links to the other portals. Shows enough status to answer
-"is anything wrong right now" at a glance.
-
-## No significant prior art
-
-The prior art has no hub page. `apps.internal` is new but trivial.
+Landing page. Links to the other portals with a one-line plain-language description of each.
+Answers "is anything wrong right now" at a glance in v2.
 
 ## v1: static hub
 
-A static HTML page (no Flask backend needed) with:
+A static HTML page (no Flask backend) with:
 
 - Links: me.internal, network.internal, register.internal
-- Brief one-line description of each
-- Household name in the header (rendered by Caddy/Jinja at provision time)
+- One-line description of each, written for a non-technical reader:
+  - me.internal: "See your device's ad-blocking stats, or pause it for a while."
+  - network.internal: "Check if the internet is working and see what devices are online."
+  - register.internal: "Name a new device so the network remembers it."
+- `{{ household_name }}` in the header — rendered by Ansible at provision time from
+  `config.toml:portal.household_name`
 
-Already deployed as a placeholder by the `portal` Ansible role.
-The placeholder just needs real content and links.
+apps.internal v1 has no Flask route. Caddy serves it as a static `file_server`.
 
 ## v2: status hub
 
-Upgrade to a lightweight Flask route that checks:
+Upgrade to a Flask route that reads cached data (written by the latency cron) and renders
+three status indicators:
 
 | Indicator | Source | Display |
 |-----------|--------|---------|
-| Pi-hole reachable | HTTP to `http://10.40.0.2/api/stats/summary` | ✓ / ✗ |
-| Router reachable | SSH or HTTP | ✓ / ✗ |
-| Internet up | Cached latency result from local SQLite | ✓ / ✗ |
+| Pi-hole reachable | Last successful API call timestamp | ✓ / ✗ |
+| Router reachable | Last successful SSH call timestamp | ✓ / ✗ |
+| Internet up | Last latency sample from `latency_log` | ✓ / ✗ |
 
-No live queries on page load — all indicators read from cached results
-(written by the latency cron job). Page load stays fast.
+All indicators read from SQLite — no live queries on page load. Status refreshes via HTMX
+every 30 seconds.
 
-## Routes (v2 only)
+v2 status indicators are only meaningful once the latency cron is running. Do not add them
+before the cron exists.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Hub page with status indicators (Host: apps.internal) |
+## Access control
 
-## Notes
-
-- v1 is already partially deployed (placeholder HTML). Upgrade to real links
-  immediately — no backend work required.
-- v2 status indicators are only meaningful once the cron jobs from
-  `network.internal` are running. Don't add them until those exist.
+All segments that can reach app_server:80 can reach apps.internal. No segment-specific
+content differences — the hub is the same for everyone.
