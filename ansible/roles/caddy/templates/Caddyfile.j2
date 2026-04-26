@@ -24,6 +24,7 @@ me.{{ lankit_internal_domain }} {
     tls /etc/lankit-portal/tls/cert.pem /etc/lankit-portal/tls/key.pem
     reverse_proxy localhost:5000 {
         header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto https
     }
 }
 
@@ -31,6 +32,7 @@ network.{{ lankit_internal_domain }} {
     tls /etc/lankit-portal/tls/cert.pem /etc/lankit-portal/tls/key.pem
     reverse_proxy localhost:5000 {
         header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto https
     }
 }
 
@@ -43,8 +45,13 @@ apps.{{ lankit_internal_domain }} {
 {% if lankit_portals.get('registration') %}
 register.{{ lankit_internal_domain }} {
     tls /etc/lankit-portal/tls/cert.pem /etc/lankit-portal/tls/key.pem
+    handle /ca.crt {
+        root * /var/www/lankit-portal/apps
+        file_server
+    }
     reverse_proxy localhost:5000 {
         header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto https
     }
 }
 {% endif %}

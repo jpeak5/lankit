@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, abort, render_template, request
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import config
 import db
@@ -16,6 +17,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1)
 
 # Initialised in startup()
 pihole: PiholeClient = None
