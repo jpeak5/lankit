@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}register.internal — {{ household_name }}{% endblock %}
+{% block content %}
+
+<header>
+  <h1>Register this device</h1>
+  <span class="subdomain">register.internal</span>
+</header>
+
+{% if request.scheme == 'http' %}
+<div class="card" style="border-color:var(--warn)">
+  <p class="card-title" style="color:var(--warn)">Trust this network</p>
+  <p class="muted" style="margin-bottom:0.75rem">
+    Install the {{ household_name }} network certificate to enable secure
+    connections to all <code>.internal</code> addresses.
+  </p>
+  <a href="/ca.crt" class="btn-primary" style="display:inline-block;padding:0.45rem 1rem;border-radius:8px;color:#fff;background:var(--accent);text-decoration:none;font-size:0.9rem">
+    Download certificate
+  </a>
+  <p class="muted" style="margin-top:0.75rem;font-size:0.8rem">
+    <strong>iOS / iPadOS:</strong> Open the file → Settings → General → VPN &amp; Device Management → install → then General → About → Certificate Trust Settings → enable.<br>
+    <strong>Android:</strong> Open the file → install as CA certificate.<br>
+    <strong>Mac:</strong> Open the file → Keychain Access → double-click → set to Always Trust.<br>
+    <strong>Windows:</strong> Open the file → Install Certificate → Local Machine → Trusted Root.<br>
+    <strong>Linux:</strong> <code>sudo cp ca.crt /usr/local/share/ca-certificates/lankit.crt &amp;&amp; sudo update-ca-certificates</code> — then restart your browser. Firefox: Settings → Privacy &amp; Security → Certificates → View Certificates → Authorities → Import.
+  </p>
+</div>
+{% endif %}
+
+<div class="card">
+  <p class="card-title">Device</p>
+  <div class="stat-row">
+    <span class="stat-label">IP address</span>
+    <span class="stat-value">{{ ip }}</span>
+  </div>
+  {% if mac %}
+  <div class="stat-row">
+    <span class="stat-label">Device identifier</span>
+    <span class="stat-value" style="font-family:monospace;font-size:0.85rem">{{ mac }}</span>
+  </div>
+  {% endif %}
+  {% if current_name %}
+  <div class="stat-row">
+    <span class="stat-label">Current name</span>
+    <span class="stat-value">{{ current_name }}</span>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <p class="card-title">{{ "Change name" if current_name else "Name this device" }}</p>
+  <p class="muted" style="margin-bottom:0.75rem">
+    Give this device a name so the network remembers it.
+    You'll see this name anywhere devices are listed.
+  </p>
+  <form class="inline-form"
+        hx-post="/register"
+        hx-target="#register-result"
+        hx-swap="innerHTML">
+    <input type="text"
+           name="name"
+           value="{{ current_name or '' }}"
+           placeholder="my-device"
+           maxlength="30"
+           autocomplete="off"
+           spellcheck="false">
+    <button type="submit" class="btn-primary">
+      {{ "Update" if current_name else "Register" }}
+    </button>
+  </form>
+  <div id="register-result" style="margin-top:0.5rem"></div>
+  <p class="muted" style="margin-top:0.5rem">Letters, numbers, and hyphens only.</p>
+</div>
+
+{% endblock %}

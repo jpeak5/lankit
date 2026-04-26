@@ -16,6 +16,7 @@ add name={{ name }}.{{ internal_domain }} \
 {% endfor %}
 
 {% if include_globals %}
+{% if dns_server_segment is not none %}
 # Service hostnames
 add name=dns.{{ internal_domain }} \
     address={{ dns_server_ip }} \
@@ -25,6 +26,7 @@ add name=pihole.{{ internal_domain }} \
     address={{ dns_server_ip }} \
     ttl=1h type=A \
     comment="kit:dns:pihole:hostname"
+{% endif %}
 {% if app_server_ip %}
 add name=apps.{{ internal_domain }} \
     address={{ app_server_ip }} \

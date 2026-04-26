@@ -1,0 +1,33 @@
+{# HTMX fragment — returned by /status, /bypass, /bypass/cancel #}
+{# Also included inline by me/index.html for first render. #}
+{% if error is defined and error %}
+  <p class="msg msg-error">{{ error }}</p>
+{% elif blocking == "disabled" %}
+  <p class="msg msg-warn">Ad blocking is globally off — no per-device controls available.</p>
+{% elif bypass_active %}
+  {# Active bypass — show timer and cancel button #}
+  {% set mins = (bypass_seconds // 60) %}
+  {% set secs = (bypass_seconds % 60) %}
+  <p class="msg">Ad blocking paused —
+    <strong>{% if mins %}{{ mins }}m {% endif %}{{ secs }}s remaining</strong>
+  </p>
+  <form hx-post="/bypass/cancel"
+        hx-target="#blocking"
+        hx-swap="innerHTML">
+    <button type="submit" class="btn-ghost">Resume now</button>
+  </form>
+{% else %}
+  {# No active bypass — show duration selector and pause button #}
+  <form class="inline-form"
+        hx-post="/bypass"
+        hx-target="#blocking"
+        hx-swap="innerHTML">
+    <select name="duration">
+      <option value="15">15 min</option>
+      <option value="30" selected>30 min</option>
+      <option value="60">1 hour</option>
+      <option value="120">2 hours</option>
+    </select>
+    <button type="submit" class="btn-primary">Pause ad blocking</button>
+  </form>
+{% endif %}

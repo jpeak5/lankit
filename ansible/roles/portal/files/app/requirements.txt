@@ -1,0 +1,5 @@
+flask>=3.0
+apscheduler>=3.10
+sqlalchemy>=2.0
+requests>=2.31
+speedtest-cli>=2.1

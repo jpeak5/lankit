@@ -56,7 +56,7 @@ lankit test-failsafe                 # verify auto-revert works before relying o
 
 ---
 
-## Phase 5 — Provision Pi-hole + Unbound
+## Phase 5 — Provision Pi-hole + Unbound (skip if no Pi-hole host configured)
 
 ```bash
 lankit provision                     # runs ansible/site.yml against dns_server
@@ -69,6 +69,48 @@ Pre-flight checks on your development machine before running:
   ```python
   python3 -c "from mac_vendor_lookup import MacLookup; MacLookup().update_vendors()"
   ```
+
+---
+
+## Phase 6 — Portal UX tests (Playwright)
+
+Requires the portals to be live on the app server and the CA cert trusted
+on the machine running the tests.
+
+**Install test dependencies:**
+
+```bash
+pip install -e ".[test]"
+playwright install chromium
+```
+
+**Run the full suite:**
+
+```bash
+pytest tests/ -v
+```
+
+**Run a single persona:**
+
+```bash
+pytest tests/test_me.py::TestMeAsKwame -v
+```
+
+Screenshots are written to `docs/screenshots/` on each run and are
+gitignored. They serve as living documentation of the current portal UI.
+
+Open UX test gaps are tracked as GitHub issues labeled [`ux-test`](https://github.com/jpeak5/lankit/issues?q=label%3aux-test+is%3aopen).
+
+**Network prerequisites:**
+
+- DNS: `*.internal` must resolve to the app server from the machine running tests
+- TLS: the CA cert must be installed and trusted on the test machine
+- `LANKIT_APP_SERVER` env var: defaults to `10.40.0.3:5000` — override if your
+  Pi's address differs
+- One test (`test_https_portal_fails_without_cert`) verifies TLS enforcement
+  using a strict context. If the CA cert is in the machine's system trust store,
+  this test will produce a false pass — run it from a machine that hasn't
+  installed the cert, or accept the false pass as a known limitation
 
 ---
 

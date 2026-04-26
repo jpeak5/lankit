@@ -86,9 +86,13 @@
       "type": "boolean"
     },
 
+    "dns_ip": {
+      "type": "string",
+      "description": "DNS IP handed to devices via DHCP. Inferred from hosts.dns_server.ip when a Pi-hole host is configured; required otherwise (e.g. '1.1.1.1' or '8.8.8.8')."
+    },
+
     "hosts": {
       "type": "object",
-      "required": ["dns_server"],
       "additionalProperties": false,
       "properties": {
         "dns_server": { "$ref": "#/$defs/host" },
@@ -99,6 +103,17 @@
     "portals": {
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/portal" }
+    },
+
+    "tls": {
+      "type": "object",
+      "required": ["cert", "key", "ca_cert"],
+      "additionalProperties": false,
+      "properties": {
+        "cert":    { "type": "string" },
+        "key":     { "type": "string" },
+        "ca_cert": { "type": "string" }
+      }
     },
 
     "router": {

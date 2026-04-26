@@ -169,12 +169,33 @@ def probe(config_path, segment, audit_only):
                 else:
                     console.print(f"  [green]✓[/green] All {total_gw} gateways reachable.\n")
 
-            # ── Forward-chain note ────────────────────────────────────────────
+            # ── Bridge IP-firewall check ──────────────────────────────────────
+            use_ip_fw = _bridge_use_ip_firewall(conn)
             console.print("[dim]─────────────────────────────────────────────────────[/dim]")
-            console.print("[dim]Forward-chain verification (inter-segment firewall)[/dim]")
-            console.print("[dim]requires a physical device in each segment. The[/dim]")
-            console.print("[dim]matrix above shows intended policy; probe confirmed[/dim]")
-            console.print("[dim]the rules are deployed, not that they work as intended.[/dim]")
+            if use_ip_fw is False:
+                console.print(
+                    "[yellow]⚠[/yellow]  [bold]Bridge IP firewall is off[/bold] "
+                    "([dim]use-ip-firewall=no[/dim])"
+                )
+                console.print(
+                    "   Hosts on the [bold]same VLAN[/bold] exchange bridged frames "
+                    "that bypass the IP forward chain entirely."
+                )
+                console.print(
+                    "   The rules above are deployed and protect [bold]inter-segment[/bold] "
+                    "traffic, but probe cannot verify intra-VLAN host-to-host reachability "
+                    "from the router."
+                )
+                console.print(
+                    "   To test: SSH to a host in a segment and ping another host in "
+                    "[bold]the same segment[/bold].\n"
+                )
+            else:
+                console.print("[dim]Forward-chain verification (inter-segment firewall)[/dim]")
+                console.print("[dim]requires a physical device in each segment. The[/dim]")
+                console.print("[dim]matrix above shows intended policy; probe confirmed[/dim]")
+                console.print("[dim]the rules are deployed, not that they work as intended.[/dim]")
+                console.print()
             console.print("[dim]Run: lankit matrix  to review the expected policy.[/dim]\n")
 
     except RouterError as e:
@@ -317,3 +338,14 @@ def _ping_gateway(conn, gateway: str) -> tuple[bool, str]:
     m = _RECEIVED_RE.search(out)
     received = int(m.group(1)) if m else 0
     return received > 0, f"{received}/3 packets"
+
+
+def _bridge_use_ip_firewall(conn) -> bool | None:
+    """Return True/False for use-ip-firewall bridge setting, None on error."""
+    out, err = conn.run_tolerant("/interface bridge settings print")
+    if err:
+        return None
+    m = re.search(r"use-ip-firewall:\s*(yes|no)", out)
+    if not m:
+        return None
+    return m.group(1) == "yes"

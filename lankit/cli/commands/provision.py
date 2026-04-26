@@ -33,12 +33,23 @@ def provision(config_path, host, tags, check, verbose):
       lankit provision --tags pihole
       lankit provision --check
     """
+    import shutil
     import subprocess
+    import sys
     import tempfile
     import os
     from lankit.core.config import load, ConfigError
     from pathlib import Path
     from rich.console import Console
+
+    def _find_bin(name: str) -> str:
+        venv_bin = Path(sys.executable).parent / name
+        if venv_bin.exists():
+            return str(venv_bin)
+        found = shutil.which(name)
+        if found:
+            return found
+        raise SystemExit(f"{name} not found — is ansible-core installed?")
 
     console = Console()
 
@@ -47,6 +58,9 @@ def provision(config_path, host, tags, check, verbose):
     except ConfigError as e:
         console.print(f"[bold red]Config error:[/bold red] {e}")
         raise SystemExit(1)
+
+    from lankit.core.passwords import read_vault
+    vault = read_vault()
 
     # Ansible dirs relative to cwd (lankit repo root)
     ansible_dir = Path("ansible")
@@ -68,7 +82,9 @@ def provision(config_path, host, tags, check, verbose):
     ssh_key = str(Path(cfg.ssh_key).expanduser())
     groups: dict[str, dict] = {}  # group → {host_name: Host}
     for name, h in cfg.hosts.items():
-        if not h.enabled:
+        # --host flag overrides the enabled guard (allows provisioning a host
+        # that is still marked enabled: false while being set up for the first time)
+        if not h.enabled and name != host:
             continue
         if host and name != host:
             continue
@@ -91,7 +107,8 @@ def provision(config_path, host, tags, check, verbose):
     dns = cfg.hosts.get("dns_server")
     app = cfg.hosts.get("app_server")
     extra_vars = {
-        "lankit_dns_server_ip":      dns.ip if dns else "",
+        "lankit_dns_server_ip":      cfg.dns_ip,
+        "lankit_pihole_enabled":     bool(dns_host and dns_host.enabled),
         "lankit_dns_server_gateway": _dns_gateway(cfg),
         "lankit_internal_domain":   cfg.internal_domain,
         "lankit_privacy_level":     _privacy_level_int(cfg.privacy.query_logging),
@@ -103,6 +120,11 @@ def provision(config_path, host, tags, check, verbose):
         "lankit_portals":           cfg.portals,
         "lankit_app_server_ip":     app.ip if app and app.enabled else "",
         "household_name":           cfg.household_name,
+        "lankit_pihole_password":   vault.get("pihole_password", ""),
+        "lankit_tls_enabled":       _tls_ready(cfg),
+        "lankit_tls_cert":          cfg.tls.cert    if cfg.tls else "",
+        "lankit_tls_key":           cfg.tls.key     if cfg.tls else "",
+        "lankit_tls_ca_cert":       cfg.tls.ca_cert if cfg.tls else "",
     }
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as inv_f:
@@ -111,7 +133,7 @@ def provision(config_path, host, tags, check, verbose):
 
     try:
         cmd = [
-            "ansible-playbook",
+            _find_bin("ansible-playbook"),
             str(playbook),
             "-i", inv_path,
             "--extra-vars", _format_extra_vars(extra_vars),
@@ -146,6 +168,13 @@ def _privacy_level_int(query_logging: str) -> int:
     return {"full": 0, "anonymous": 1, "none": 3}.get(query_logging, 0)
 
 
+_PORTAL_SUBDOMAINS = {
+    "device":       "me",
+    "network":      "network",
+    "registration": "register",
+}
+
+
 def _build_dns_hosts(cfg) -> list[str]:
     """Build list of 'IP hostname' pairs for Pi-hole local DNS."""
     lines = []
@@ -157,6 +186,12 @@ def _build_dns_hosts(cfg) -> list[str]:
     for name, h in cfg.hosts.items():
         if h.enabled:
             lines.append(f"{h.ip} {h.hostname}.{domain}")
+    # Portal subdomains — each enabled portal gets its own DNS name on app_server
+    app = cfg.hosts.get("app_server")
+    if app and app.enabled:
+        for portal, subdomain in _PORTAL_SUBDOMAINS.items():
+            if cfg.portals.get(portal):
+                lines.append(f"{app.ip} {subdomain}.{domain}")
     return lines
 
 
@@ -166,6 +201,14 @@ def _read_public_key(private_key_path: str) -> str:
     if not pub.exists():
         raise SystemExit(f"SSH public key not found: {pub}")
     return pub.read_text().strip()
+
+
+def _tls_ready(cfg) -> bool:
+    """True only when all three cert files exist on disk."""
+    if not cfg.tls:
+        return False
+    from pathlib import Path
+    return all(Path(p).exists() for p in [cfg.tls.cert, cfg.tls.key, cfg.tls.ca_cert])
 
 
 def _format_extra_vars(d: dict) -> str:

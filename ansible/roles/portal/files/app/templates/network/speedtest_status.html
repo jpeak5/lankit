@@ -1,0 +1,44 @@
+<div id="speedtest-status"
+     {% if speedtest_running %}
+     hx-get="/speedtest/status"
+     hx-trigger="every 3s"
+     hx-swap="outerHTML"
+     {% endif %}>
+
+  {% if speedtest_running %}
+    <p class="muted">Running… this takes about 30 seconds.</p>
+  {% elif last_speed %}
+    {% if last_speed.error %}
+      <p class="msg msg-error">Last test failed: {{ last_speed.error }}</p>
+    {% else %}
+      <div class="stat-row">
+        <span class="stat-label">Download</span>
+        <span class="stat-value">{{ "%.1f"|format(last_speed.download_mbps) }} Mbps</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Upload</span>
+        <span class="stat-value">{{ "%.1f"|format(last_speed.upload_mbps) }} Mbps</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Ping</span>
+        <span class="stat-value">{{ "%.0f"|format(last_speed.ping_ms) }} ms</span>
+      </div>
+      <p class="muted" style="margin-top:0.5rem">Tested {{ last_speed.measured_at[:16] }}</p>
+    {% endif %}
+  {% else %}
+    <p class="muted">No test run yet.</p>
+  {% endif %}
+
+  {% if cooldown_m %}
+    <p class="muted" style="margin-top:0.5rem">Next test available in ~{{ cooldown_m }} min.</p>
+  {% endif %}
+
+  {% if not speedtest_running %}
+    <form hx-post="/speedtest"
+          hx-target="#speedtest-status"
+          hx-swap="outerHTML"
+          style="margin-top:0.75rem">
+      <button type="submit" class="btn-ghost">Run now</button>
+    </form>
+  {% endif %}
+</div>

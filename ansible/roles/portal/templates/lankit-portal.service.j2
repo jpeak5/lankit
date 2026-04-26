@@ -1,0 +1,21 @@
+# lankit-portal.service — managed by lankit provision
+[Unit]
+Description=lankit portal (Flask)
+After=network.target
+
+[Service]
+Type=simple
+User=portal
+Group=portal
+WorkingDirectory=/opt/lankit-portal
+ExecStart=/opt/lankit-portal/venv/bin/python /opt/lankit-portal/app.py
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+
+# Config is readable only by the portal user
+Environment=LANKIT_CONFIG=/etc/lankit-portal/config.toml
+
+[Install]
+WantedBy=multi-user.target

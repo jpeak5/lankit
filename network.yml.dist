@@ -222,6 +222,9 @@ permissions:
 # make a choice for each one.
 
 privacy:
+  # Note: these settings only apply when a Pi-hole host is configured.
+  # With dns_ip pointing to a public resolver, your ISP's server handles
+  # queries and these settings have no effect.
 
   # Query logging: what your DNS server records about lookups.
   #
@@ -305,6 +308,21 @@ dnssec: true
 
 # ─── Hosts ────────────────────────────────────────────────────────────────────
 # Physical machines with fixed roles. lankit provisions these.
+#
+# DNS — two paths:
+#
+#   With Pi-hole (recommended):
+#     Define dns_server below. lankit provisions Pi-hole + Unbound and
+#     uses dns_server.ip as the DNS address handed out via DHCP.
+#     The privacy settings above apply.
+#
+#   Without Pi-hole (router-only):
+#     Omit or disable dns_server. Set dns_ip to a public resolver:
+#
+#       dns_ip: "1.1.1.1"   # or 8.8.8.8, 9.9.9.9, etc.
+#
+#     lankit will skip DNS provisioning. The privacy settings above are
+#     ignored — your ISP's resolver sees your queries instead.
 
 hosts:
   dns_server:

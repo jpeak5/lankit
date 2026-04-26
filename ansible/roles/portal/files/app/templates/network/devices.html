@@ -1,0 +1,19 @@
+{% if devices %}
+  <ul class="plain">
+    {% for d in devices %}
+    <li style="display:flex;justify-content:space-between;align-items:baseline">
+      <span>
+        <span style="display:inline-block;width:0.5rem;height:0.5rem;border-radius:50%;background:{{ 'var(--success)' if d.online else 'var(--border)' }};margin-right:0.5rem;vertical-align:middle"></span>
+        {{ d.hostname }}
+      </span>
+      <span class="muted" style="font-family:monospace;font-size:0.8rem">{{ d.ip }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="muted" style="margin-top:0.5rem">
+    {{ devices | selectattr('online') | list | length }} online,
+    {{ devices | rejectattr('online') | list | length }} offline
+  </p>
+{% else %}
+  <p class="muted">No devices found.</p>
+{% endif %}
