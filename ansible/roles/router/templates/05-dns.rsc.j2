@@ -5,8 +5,14 @@
 # providing a fallback if the Pi-hole is temporarily unreachable.
 
 /ip dns static
-# Remove all previously managed entries so this script is idempotent
+# Remove previously managed entries (full apply: all; segment mode: this segment only)
+{% if include_globals %}
 :foreach i in=[/ip dns static find where comment~"^lankit:dns:"] do={ /ip dns static remove $i }
+{% else %}
+{% for name in segments %}
+:foreach i in=[/ip dns static find where comment~"^lankit:dns:{{ name }}:"] do={ /ip dns static remove $i }
+{% endfor %}
+{% endif %}
 
 {% for name, seg in segments.items() %}
 add name={{ name }}.{{ internal_domain }} \

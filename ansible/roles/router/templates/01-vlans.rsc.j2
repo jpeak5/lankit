@@ -10,8 +10,15 @@
 # you will lose access to the router.
 
 # ── Remove previously managed entries (idempotent re-apply) ─────────────────
+{% if include_globals %}
 :foreach i in=[/interface vlan find where comment~"^lankit:vlan:"] do={ /interface vlan remove $i }
 :foreach i in=[/interface bridge vlan find where comment~"^lankit:vlan:"] do={ /interface bridge vlan remove $i }
+{% else %}
+{% for name in segments %}
+:foreach i in=[/interface vlan find where comment~"^lankit:vlan:{{ name }}:"] do={ /interface vlan remove $i }
+:foreach i in=[/interface bridge vlan find where comment~"^lankit:vlan:{{ name }}:"] do={ /interface bridge vlan remove $i }
+{% endfor %}
+{% endif %}
 
 # ── VLAN interfaces on the bridge ───────────────────────────────────────────
 {% for name, seg in segments.items() %}

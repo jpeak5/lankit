@@ -11,8 +11,15 @@
 {% if has_bw.value %}
 
 # ── Remove previously managed entries (idempotent re-apply) ─────────────────
-:foreach i in=[/ip firewall mangle find where comment~"^lanlankit:bw:"] do={ /ip firewall mangle remove $i }
-:foreach i in=[/queue tree find where comment~"^lanlankit:bw:"] do={ /queue tree remove $i }
+{% if include_globals %}
+:foreach i in=[/ip firewall mangle find where comment~"^lankit:bw:"] do={ /ip firewall mangle remove $i }
+:foreach i in=[/queue tree find where comment~"^lankit:bw:"] do={ /queue tree remove $i }
+{% else %}
+{% for name in segments %}
+:foreach i in=[/ip firewall mangle find where comment~"^lankit:bw:{{ name }}:"] do={ /ip firewall mangle remove $i }
+:foreach i in=[/queue tree find where comment~"^lankit:bw:{{ name }}:"] do={ /queue tree remove $i }
+{% endfor %}
+{% endif %}
 
 # ── Mangle: mark packets per segment for queue targeting ────────────────────
 /ip firewall mangle

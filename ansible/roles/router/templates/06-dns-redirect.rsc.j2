@@ -14,7 +14,13 @@
 
 {% if has_redirect.value and dns_server_segment is not none %}
 /ip firewall nat
-:foreach i in=[/ip firewall nat find where comment~"^lanlankit:fw:.*:dns-redirect"] do={ /ip firewall nat remove $i }
+{% if include_globals %}
+:foreach i in=[/ip firewall nat find where comment~"^lankit:fw:.*:dns-redirect"] do={ /ip firewall nat remove $i }
+{% else %}
+{% for name in segments %}
+:foreach i in=[/ip firewall nat find where comment~"^lankit:fw:{{ name }}:dns-redirect"] do={ /ip firewall nat remove $i }
+{% endfor %}
+{% endif %}
 
 {% for name, seg in segments.items() %}
 {% if seg.force_dns %}

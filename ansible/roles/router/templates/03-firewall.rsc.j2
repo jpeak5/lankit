@@ -13,11 +13,20 @@
 #   9. NAT masquerade for all VLAN subnets
 
 # ── Remove previously managed entries (idempotent re-apply) ─────────────────
-:foreach i in=[/ip firewall filter find where comment~"^lanlankit:"] do={ /ip firewall filter remove $i }
-:foreach i in=[/ip firewall mangle find where comment~"^lanlankit:fw:"] do={ /ip firewall mangle remove $i }
-:foreach i in=[/ip firewall nat find where comment~"^lanlankit:nat:"] do={ /ip firewall nat remove $i }
-:foreach i in=[/ip firewall address-list find where comment~"^lanlankit:fw:"] do={ /ip firewall address-list remove $i }
-:foreach i in=[/interface list member find where comment~"^lanlankit:fw:"] do={ /interface list member remove $i }
+{% if include_globals %}
+:foreach i in=[/ip firewall filter find where comment~"^lankit:"] do={ /ip firewall filter remove $i }
+:foreach i in=[/ip firewall mangle find where comment~"^lankit:fw:"] do={ /ip firewall mangle remove $i }
+:foreach i in=[/ip firewall nat find where comment~"^lankit:nat:"] do={ /ip firewall nat remove $i }
+:foreach i in=[/ip firewall address-list find where comment~"^lankit:fw:"] do={ /ip firewall address-list remove $i }
+:foreach i in=[/interface list member find where comment~"^lankit:fw:"] do={ /interface list member remove $i }
+{% else %}
+{% for name in segments %}
+:foreach i in=[/ip firewall filter find where comment~"^lankit:fw:{{ name }}:"] do={ /ip firewall filter remove $i }
+:foreach i in=[/ip firewall filter find where comment~"^lankit:fw:{{ name }}>"] do={ /ip firewall filter remove $i }
+:foreach i in=[/ip firewall address-list find where comment~"^lankit:fw:{{ name }}:"] do={ /ip firewall address-list remove $i }
+:foreach i in=[/interface list member find where comment~"^lankit:fw:{{ name }}:"] do={ /interface list member remove $i }
+{% endfor %}
+{% endif %}
 
 # ── Add VLAN interfaces to LAN list ─────────────────────────────────────────
 # The defconf input rules accept LAN traffic. Without this, VLAN

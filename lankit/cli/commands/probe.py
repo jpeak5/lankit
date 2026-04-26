@@ -83,7 +83,7 @@ def probe(config_path, segment, audit_only):
 
             expected_set = set(expected)
             missing = sorted(expected_set - live)
-            stale = sorted(t for t in live if t.startswith("lankit:") and t not in expected_set)
+            stale = sorted(t for t in live if (t.startswith("lankit:") or t.startswith("kit:")) and t not in expected_set)
 
             # Per-segment audit table
             audit_table = Table(box=box.SIMPLE_HEAD, show_lines=False, padding=(0, 1))

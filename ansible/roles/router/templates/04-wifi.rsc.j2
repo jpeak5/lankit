@@ -8,9 +8,17 @@
 #   - Same SSID + passphrase on both bands = seamless band-steering
 
 # ── Remove previously managed entries (idempotent re-apply) ─────────────────
-:foreach i in=[/interface bridge port find where comment~"^lanlankit:wifi:"] do={ /interface bridge port remove $i }
-:foreach i in=[/interface wifi find where comment~"^lanlankit:wifi:"] do={ /interface wifi remove $i }
-:foreach i in=[/interface wifi security find where comment~"^lanlankit:wifi:"] do={ /interface wifi security remove $i }
+{% if include_globals %}
+:foreach i in=[/interface bridge port find where comment~"^lankit:wifi:"] do={ /interface bridge port remove $i }
+:foreach i in=[/interface wifi find where comment~"^lankit:wifi:"] do={ /interface wifi remove $i }
+:foreach i in=[/interface wifi security find where comment~"^lankit:wifi:"] do={ /interface wifi security remove $i }
+{% else %}
+{% for name in segments %}
+:foreach i in=[/interface bridge port find where comment~"^lankit:wifi:{{ name }}:"] do={ /interface bridge port remove $i }
+:foreach i in=[/interface wifi find where comment~"^lankit:wifi:{{ name }}:"] do={ /interface wifi remove $i }
+:foreach i in=[/interface wifi security find where comment~"^lankit:wifi:{{ name }}:"] do={ /interface wifi security remove $i }
+{% endfor %}
+{% endif %}
 
 {% if include_globals %}
 # ── Hide master interfaces ───────────────────────────────────────────────────
