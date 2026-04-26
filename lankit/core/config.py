@@ -122,11 +122,8 @@ class Config:
     failsafe_seconds: int
     ssh_key: str
     portals: dict[str, bool]  # portal name → enabled
+    dns_ip: str                # IP handed to devices via DHCP — Pi-hole or public DNS
     tls: Optional[TLS] = None
-
-    def dns_server_ip(self) -> str:
-        """IP of the dns_server host."""
-        return self.hosts["dns_server"].ip
 
     def segments_with_wifi(self) -> dict[str, Segment]:
         return {n: s for n, s in self.segments.items() if s.has_wifi}
@@ -247,6 +244,15 @@ def _validate_cross_references(raw: dict) -> None:
     segment_names = set(raw.get("segments", {}).keys())
     errors = []
 
+    # dns_ip must be either inferrable from hosts.dns_server or explicitly set
+    dns_host = raw.get("hosts", {}).get("dns_server")
+    has_dns_host = dns_host is not None and dns_host.get("enabled", True)
+    if not has_dns_host and not raw.get("dns_ip"):
+        errors.append(
+            "  dns_ip: required when hosts.dns_server is absent or disabled — "
+            "set to a public DNS IP (e.g. '1.1.1.1') or provision a Pi-hole host"
+        )
+
     for seg_name, perm in raw.get("permissions", {}).items():
         if seg_name not in segment_names:
             errors.append(
@@ -329,6 +335,13 @@ def _build_config(raw: dict, config_path: Optional[Path] = None) -> Config:
             ca_cert=_resolve_tls_path(tls_raw["ca_cert"]),
         )
 
+    dns_host = hosts.get("dns_server")
+    dns_ip = (
+        dns_host.ip
+        if dns_host and dns_host.enabled
+        else raw["dns_ip"]  # validated present by _validate_cross_references
+    )
+
     return Config(
         household_name=raw["household_name"],
         internal_domain=raw["internal_domain"],
@@ -343,6 +356,7 @@ def _build_config(raw: dict, config_path: Optional[Path] = None) -> Config:
         failsafe_seconds=raw["failsafe_seconds"],
         ssh_key=raw["ssh_key"],
         portals=portals,
+        dns_ip=dns_ip,
         tls=tls,
     )
 

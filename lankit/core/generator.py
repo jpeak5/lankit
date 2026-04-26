@@ -106,7 +106,8 @@ def _build_context(
     segment_filter: when set, only that segment is included in the context.
     include_globals is False so templates skip system-wide sections.
     """
-    dns = cfg.hosts["dns_server"]
+    dns = cfg.hosts.get("dns_server")
+    dns = dns if (dns and dns.enabled) else None
     app = cfg.hosts.get("app_server")
 
     if wifi_passphrases is None:
@@ -136,11 +137,11 @@ def _build_context(
         "include_globals":    include_globals,
         "household_name":     cfg.household_name,
         "internal_domain":    cfg.internal_domain,
-        "dns_server_ip":      dns.ip,
-        "dns_server_mac":     dns.mac,
-        "dns_server_segment": dns.segment,
-        "dns_server_vlan_id": cfg.segments[dns.segment].vlan_id,
-        "dns_server_gateway": str(ipaddress.ip_network(cfg.segments[dns.segment].subnet, strict=False).network_address + 1),
+        "dns_server_ip":      cfg.dns_ip,
+        "dns_server_mac":     dns.mac     if dns else None,
+        "dns_server_segment": dns.segment if dns else None,
+        "dns_server_vlan_id": cfg.segments[dns.segment].vlan_id if dns else None,
+        "dns_server_gateway": str(ipaddress.ip_network(cfg.segments[dns.segment].subnet, strict=False).network_address + 1) if dns else None,
         "app_server_ip":      app.ip if app and app.enabled else None,
         "app_server_mac":     app.mac if app and app.enabled else None,
         "app_server_segment": app.segment if app and app.enabled else None,
