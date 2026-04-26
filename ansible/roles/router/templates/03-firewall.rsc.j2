@@ -76,8 +76,9 @@ add chain=forward \
 {% endfor %}
 
 # ── DNS permit: all segments → DNS server ────────────────────────────────────
-# Segments with dns=filtered or dns=unfiltered need to reach the server.
-# (force_dns NAT rules in 06-dns-redirect.rsc handle hardcoded DNS.)
+# Segments with dns=filtered or dns=unfiltered need to reach the local server.
+# Skipped when no Pi-hole host — internet egress rules already cover public DNS.
+{% if dns_server_segment is not none %}
 {% for name, seg in segments.items() %}
 {% if seg.dns != 'none' %}
 add chain=forward \
@@ -94,6 +95,7 @@ add chain=forward \
     comment="kit:fw:{{ name }}>dns:permit-tcp"
 {% endif %}
 {% endfor %}
+{% endif %}
 
 # ── Internet egress per segment ───────────────────────────────────────────────
 {% for name, seg in segments.items() %}

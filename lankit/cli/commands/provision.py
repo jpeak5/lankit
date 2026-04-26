@@ -108,6 +108,7 @@ def provision(config_path, host, tags, check, verbose):
     app = cfg.hosts.get("app_server")
     extra_vars = {
         "lankit_dns_server_ip":      cfg.dns_ip,
+        "lankit_pihole_enabled":     bool(dns_host and dns_host.enabled),
         "lankit_dns_server_gateway": _dns_gateway(cfg),
         "lankit_internal_domain":   cfg.internal_domain,
         "lankit_privacy_level":     _privacy_level_int(cfg.privacy.query_logging),
