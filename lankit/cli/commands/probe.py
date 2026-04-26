@@ -2,7 +2,7 @@ import re
 import click
 from lankit.cli.__main__ import cli
 
-_COMMENT_RE = re.compile(r'comment="(kit:[^"]+)"')
+_COMMENT_RE = re.compile(r'comment="(lankit:[^"]+)"')
 _RECEIVED_RE = re.compile(r'received=(\d+)')
 
 
@@ -20,7 +20,7 @@ def probe(config_path, segment, audit_only):
 
     \b
       Phase 1 — Config audit (no traffic)
-        Compares every kit:-tagged rule lankit would generate against
+        Compares every lankit:-tagged rule lankit would generate against
         what is actually present on the router. Surfaces missing rules
         (apply didn't fully succeed) and stale rules (previous config
         not cleaned up after a segment was removed or renamed).
@@ -76,14 +76,14 @@ def probe(config_path, segment, audit_only):
 
             # ── Phase 1: Config audit ─────────────────────────────────────────
             console.print("[bold]Phase 1 — Configuration audit[/bold]")
-            console.print("[dim]  Comparing expected kit: rules against live router config.[/dim]\n")
+            console.print("[dim]  Comparing expected lankit: rules against live router config.[/dim]\n")
 
             expected = _build_expected_tags(cfg)
             live = _read_live_tags(conn)
 
             expected_set = set(expected)
             missing = sorted(expected_set - live)
-            stale = sorted(t for t in live if t.startswith("kit:") and t not in expected_set)
+            stale = sorted(t for t in live if t.startswith("lankit:") and t not in expected_set)
 
             # Per-segment audit table
             audit_table = Table(box=box.SIMPLE_HEAD, show_lines=False, padding=(0, 1))
@@ -206,7 +206,7 @@ def probe(config_path, segment, audit_only):
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _build_expected_tags(cfg) -> list[str]:
-    """Complete list of kit: tags lankit would generate for this config."""
+    """Complete list of lankit: tags lankit would generate for this config."""
     tags = []
 
     dns = cfg.hosts.get("dns_server")
@@ -214,55 +214,55 @@ def _build_expected_tags(cfg) -> list[str]:
 
     for name, seg in cfg.segments.items():
         # VLAN
-        tags += [f"kit:vlan:{name}:interface", f"kit:vlan:{name}:bridge"]
+        tags += [f"lankit:vlan:{name}:interface", f"lankit:vlan:{name}:bridge"]
         # DHCP
         tags += [
-            f"kit:dhcp:{name}:address",
-            f"kit:dhcp:{name}:pool",
-            f"kit:dhcp:{name}:server",
-            f"kit:dhcp:{name}:network",
+            f"lankit:dhcp:{name}:address",
+            f"lankit:dhcp:{name}:pool",
+            f"lankit:dhcp:{name}:server",
+            f"lankit:dhcp:{name}:network",
         ]
         # Firewall: LAN member + address list
-        tags += [f"kit:fw:{name}:lan-member", f"kit:fw:{name}:address-list"]
+        tags += [f"lankit:fw:{name}:lan-member", f"lankit:fw:{name}:address-list"]
         # Firewall: client isolation
         if seg.client_isolation:
-            tags.append(f"kit:fw:{name}:isolation")
+            tags.append(f"lankit:fw:{name}:isolation")
         # Firewall: DNS permits
         if seg.dns != "none":
-            tags += [f"kit:fw:{name}>dns:permit-udp", f"kit:fw:{name}>dns:permit-tcp"]
+            tags += [f"lankit:fw:{name}>dns:permit-udp", f"lankit:fw:{name}>dns:permit-tcp"]
         # Firewall: internet egress
         if seg.internet in ["full", "egress_only"]:
-            tags.append(f"kit:fw:{name}:egress")
+            tags.append(f"lankit:fw:{name}:egress")
         # WiFi
         if seg.has_wifi:
-            tags.append(f"kit:wifi:{name}:security")
+            tags.append(f"lankit:wifi:{name}:security")
             if "5ghz" in seg.wifi_bands:
-                tags += [f"kit:wifi:{name}:ap-5g", f"kit:wifi:{name}:bridge-5g"]
+                tags += [f"lankit:wifi:{name}:ap-5g", f"lankit:wifi:{name}:bridge-5g"]
             if "2ghz" in seg.wifi_bands:
-                tags += [f"kit:wifi:{name}:ap-2g", f"kit:wifi:{name}:bridge-2g"]
+                tags += [f"lankit:wifi:{name}:ap-2g", f"lankit:wifi:{name}:bridge-2g"]
 
     # Inter-segment permits
     for src, perm in cfg.permissions.items():
         for dst in perm.can_reach:
-            tags.append(f"kit:fw:{src}>{dst}:permit")
+            tags.append(f"lankit:fw:{src}>{dst}:permit")
 
     # Global
     tags += [
-        "kit:fw:all:local-rfc1918",
-        "kit:fw:all:local-flat",
-        "kit:fw:all:mark-internet",
-        "kit:fw:all:default-deny",
-        "kit:fw:all:fasttrack-internet",
-        "kit:nat:all:masquerade",
-        "kit:vlan:legacy:flat",
-        "kit:dhcp:dns-server:lease",
+        "lankit:fw:all:local-rfc1918",
+        "lankit:fw:all:local-flat",
+        "lankit:fw:all:mark-internet",
+        "lankit:fw:all:default-deny",
+        "lankit:fw:all:fasttrack-internet",
+        "lankit:nat:all:masquerade",
+        "lankit:vlan:legacy:flat",
+        "lankit:dhcp:dns-server:lease",
     ]
 
     return tags
 
 
 def _read_live_tags(conn) -> set[str]:
-    """Read all kit: tagged comments from the live router."""
+    """Read all lankit: tagged comments from the live router."""
     commands = [
         "/interface vlan print detail without-paging",
         "/interface bridge vlan print detail without-paging",
@@ -303,22 +303,22 @@ def _per_segment_counts(name, seg, cfg, expected_set, live):
         return found, len(exp)
 
     return {
-        "vlan": count(f"kit:vlan:{name}:"),
-        "dhcp": count(f"kit:dhcp:{name}:"),
+        "vlan": count(f"lankit:vlan:{name}:"),
+        "dhcp": count(f"lankit:dhcp:{name}:"),
         "fw":   (
             sum(1 for t in expected_set
-                if (t.startswith(f"kit:fw:{name}") or f">{name}:" in t or f"{name}>" in t)
+                if (t.startswith(f"lankit:fw:{name}") or f">{name}:" in t or f"{name}>" in t)
                 and t in live),
             len([t for t in expected_set
-                 if t.startswith(f"kit:fw:{name}") or f">{name}:" in t or f"{name}>" in t]),
+                 if t.startswith(f"lankit:fw:{name}") or f">{name}:" in t or f"{name}>" in t]),
         ),
-        "wifi": count(f"kit:wifi:{name}:"),
+        "wifi": count(f"lankit:wifi:{name}:"),
     }
 
 
 def _global_counts(expected_set, live):
     global_tags = [t for t in expected_set if ":all:" in t or t in {
-        "kit:vlan:legacy:flat", "kit:dhcp:dns-server:lease",
+        "lankit:vlan:legacy:flat", "lankit:dhcp:dns-server:lease",
     }]
     found = sum(1 for t in global_tags if t in live)
     return found, len(global_tags)

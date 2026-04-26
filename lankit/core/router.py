@@ -108,7 +108,7 @@ class RouterConnection:
         self.run(
             f'/system scheduler add name="{name}" '
             f'start-time={fire_at} interval=1d '
-            f'on-event={{{revert_cmd}}} comment="kit:failsafe"'
+            f'on-event={{{revert_cmd}}} comment="lankit:failsafe"'
         )
 
     def cancel_failsafe_scheduler(self, name: str) -> None:

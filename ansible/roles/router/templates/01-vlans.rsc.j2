@@ -9,13 +9,17 @@
 # Run this LAST, after all other VLAN resources are defined, or
 # you will lose access to the router.
 
+# ── Remove previously managed entries (idempotent re-apply) ─────────────────
+:foreach i in=[/interface vlan find where comment~"^lankit:vlan:"] do={ /interface vlan remove $i }
+:foreach i in=[/interface bridge vlan find where comment~"^lankit:vlan:"] do={ /interface bridge vlan remove $i }
+
 # ── VLAN interfaces on the bridge ───────────────────────────────────────────
 {% for name, seg in segments.items() %}
 /interface vlan
 add interface=bridge \
     name=vlan-{{ name }} \
     vlan-id={{ seg.vlan_id }} \
-    comment="kit:vlan:{{ name }}:interface"
+    comment="lankit:vlan:{{ name }}:interface"
 {% endfor %}
 
 # ── Bridge VLAN table — all VLANs tagged on CPU port ────────────────────────
@@ -24,7 +28,7 @@ add interface=bridge \
 add bridge=bridge \
     tagged=bridge \
     vlan-ids={{ seg.vlan_id }} \
-    comment="kit:vlan:{{ name }}:bridge"
+    comment="lankit:vlan:{{ name }}:bridge"
 {% endfor %}
 
 {% if include_globals %}
@@ -36,7 +40,7 @@ add bridge=bridge \
     vlan-ids=1 \
     tagged=bridge \
     untagged=ether3,ether4,ether5 \
-    comment="kit:vlan:legacy:flat"
+    comment="lankit:vlan:legacy:flat"
 
 # ── Reset PVIDs to 1 on unassigned LAN ports ────────────────────────────────
 /interface bridge port

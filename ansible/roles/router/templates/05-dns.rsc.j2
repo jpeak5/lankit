@@ -6,13 +6,13 @@
 
 /ip dns static
 # Remove all previously managed entries so this script is idempotent
-:foreach i in=[/ip dns static find where comment~"^kit:dns:"] do={ /ip dns static remove $i }
+:foreach i in=[/ip dns static find where comment~"^lankit:dns:"] do={ /ip dns static remove $i }
 
 {% for name, seg in segments.items() %}
 add name={{ name }}.{{ internal_domain }} \
     address={{ seg.gateway }} \
     ttl=1h type=A \
-    comment="kit:dns:{{ name }}:gateway"
+    comment="lankit:dns:{{ name }}:gateway"
 {% endfor %}
 
 {% if include_globals %}
@@ -21,28 +21,28 @@ add name={{ name }}.{{ internal_domain }} \
 add name=dns.{{ internal_domain }} \
     address={{ dns_server_ip }} \
     ttl=1h type=A \
-    comment="kit:dns:dns-server:hostname"
+    comment="lankit:dns:dns-server:hostname"
 add name=pihole.{{ internal_domain }} \
     address={{ dns_server_ip }} \
     ttl=1h type=A \
-    comment="kit:dns:pihole:hostname"
+    comment="lankit:dns:pihole:hostname"
 {% endif %}
 {% if app_server_ip %}
 add name=apps.{{ internal_domain }} \
     address={{ app_server_ip }} \
     ttl=1h type=A \
-    comment="kit:dns:app-server:hostname"
+    comment="lankit:dns:app-server:hostname"
 add name=me.{{ internal_domain }} \
     address={{ app_server_ip }} \
     ttl=1h type=A \
-    comment="kit:dns:portal-me:hostname"
+    comment="lankit:dns:portal-me:hostname"
 add name=network.{{ internal_domain }} \
     address={{ app_server_ip }} \
     ttl=1h type=A \
-    comment="kit:dns:portal-network:hostname"
+    comment="lankit:dns:portal-network:hostname"
 add name=register.{{ internal_domain }} \
     address={{ app_server_ip }} \
     ttl=1h type=A \
-    comment="kit:dns:portal-register:hostname"
+    comment="lankit:dns:portal-register:hostname"
 {% endif %}
 {% endif %}

@@ -14,6 +14,7 @@
 
 {% if has_redirect.value and dns_server_segment is not none %}
 /ip firewall nat
+:foreach i in=[/ip firewall nat find where comment~"^lanlankit:fw:.*:dns-redirect"] do={ /ip firewall nat remove $i }
 
 {% for name, seg in segments.items() %}
 {% if seg.force_dns %}
@@ -24,7 +25,7 @@ add chain=dstnat \
     action=dst-nat \
     to-addresses={{ dns_server_ip }} \
     to-ports=53 \
-    comment="kit:fw:{{ name }}:dns-redirect-udp"
+    comment="lankit:fw:{{ name }}:dns-redirect-udp"
 
 # {{ name }}: redirect TCP/53 to Pi-hole
 add chain=dstnat \
@@ -33,7 +34,7 @@ add chain=dstnat \
     action=dst-nat \
     to-addresses={{ dns_server_ip }} \
     to-ports=53 \
-    comment="kit:fw:{{ name }}:dns-redirect-tcp"
+    comment="lankit:fw:{{ name }}:dns-redirect-tcp"
 {% endif %}
 {% endfor %}
 

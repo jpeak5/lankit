@@ -10,6 +10,10 @@
 
 {% if has_bw.value %}
 
+# ── Remove previously managed entries (idempotent re-apply) ─────────────────
+:foreach i in=[/ip firewall mangle find where comment~"^lanlankit:bw:"] do={ /ip firewall mangle remove $i }
+:foreach i in=[/queue tree find where comment~"^lanlankit:bw:"] do={ /queue tree remove $i }
+
 # ── Mangle: mark packets per segment for queue targeting ────────────────────
 /ip firewall mangle
 {% for name, seg in segments.items() %}
@@ -19,13 +23,13 @@ add chain=forward \
     new-packet-mark={{ name }}-pkt \
     passthrough=no \
     src-address-list=net-{{ name }} \
-    comment="kit:bw:{{ name }}:mark-upload"
+    comment="lankit:bw:{{ name }}:mark-upload"
 add chain=forward \
     action=mark-packet \
     new-packet-mark={{ name }}-pkt-down \
     passthrough=no \
     dst-address-list=net-{{ name }} \
-    comment="kit:bw:{{ name }}:mark-download"
+    comment="lankit:bw:{{ name }}:mark-download"
 {% endif %}
 {% endfor %}
 
@@ -37,14 +41,14 @@ add name=bw-{{ name }}-up \
     parent={{ wan_interface }} \
     packet-mark={{ name }}-pkt \
     max-limit={{ seg.bandwidth_up }} \
-    comment="kit:bw:{{ name }}:up"
+    comment="lankit:bw:{{ name }}:up"
 {% endif %}
 {% if seg.bandwidth_down %}
 add name=bw-{{ name }}-down \
     parent=global \
     packet-mark={{ name }}-pkt-down \
     max-limit={{ seg.bandwidth_down }} \
-    comment="kit:bw:{{ name }}:down"
+    comment="lankit:bw:{{ name }}:down"
 {% endif %}
 {% endfor %}
 

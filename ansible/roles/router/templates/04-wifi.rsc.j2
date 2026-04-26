@@ -7,6 +7,11 @@
 #   - All SSIDs are virtual APs on top of the masters
 #   - Same SSID + passphrase on both bands = seamless band-steering
 
+# ── Remove previously managed entries (idempotent re-apply) ─────────────────
+:foreach i in=[/interface bridge port find where comment~"^lanlankit:wifi:"] do={ /interface bridge port remove $i }
+:foreach i in=[/interface wifi find where comment~"^lanlankit:wifi:"] do={ /interface wifi remove $i }
+:foreach i in=[/interface wifi security find where comment~"^lanlankit:wifi:"] do={ /interface wifi security remove $i }
+
 {% if include_globals %}
 # ── Hide master interfaces ───────────────────────────────────────────────────
 /interface wifi
@@ -25,7 +30,7 @@ set wifi2 \
 add name=sec-{{ name }} \
     authentication-types=wpa2-psk{% if '5ghz' in seg.wifi_bands %},wpa3-psk{% endif %} \
     passphrase="{{ wifi_passphrases[name] }}" \
-    comment="kit:wifi:{{ name }}:security"
+    comment="lankit:wifi:{{ name }}:security"
 {% endif %}
 {% endfor %}
 
@@ -40,7 +45,7 @@ add name=wifi-{{ name }}-5g \
     configuration.hide-ssid={{ 'yes' if seg.ssid_hidden else 'no' }} \
     security=sec-{{ name }} \
     disabled=no \
-    comment="kit:wifi:{{ name }}:ap-5g"
+    comment="lankit:wifi:{{ name }}:ap-5g"
 {% endif %}
 {% if '2ghz' in seg.wifi_bands %}
 /interface wifi
@@ -50,7 +55,7 @@ add name=wifi-{{ name }}-2g \
     configuration.hide-ssid={{ 'yes' if seg.ssid_hidden else 'no' }} \
     security=sec-{{ name }} \
     disabled=no \
-    comment="kit:wifi:{{ name }}:ap-2g"
+    comment="lankit:wifi:{{ name }}:ap-2g"
 {% endif %}
 {% endif %}
 {% endfor %}
@@ -63,14 +68,14 @@ add name=wifi-{{ name }}-2g \
 add bridge=bridge \
     interface=wifi-{{ name }}-5g \
     pvid={{ seg.vlan_id }} \
-    comment="kit:wifi:{{ name }}:bridge-5g"
+    comment="lankit:wifi:{{ name }}:bridge-5g"
 {% endif %}
 {% if '2ghz' in seg.wifi_bands %}
 /interface bridge port
 add bridge=bridge \
     interface=wifi-{{ name }}-2g \
     pvid={{ seg.vlan_id }} \
-    comment="kit:wifi:{{ name }}:bridge-2g"
+    comment="lankit:wifi:{{ name }}:bridge-2g"
 {% endif %}
 {% endif %}
 {% endfor %}

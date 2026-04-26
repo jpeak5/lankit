@@ -13,7 +13,7 @@ def rules(config_path, segment, unit):
     """Show generated firewall and routing rules.
 
     Parses the generated .rsc scripts and displays rules tagged with the
-    lankit comment convention (kit:<unit>:<scope>:<resource>).
+    lankit comment convention (lankit:<unit>:<scope>:<resource>).
     Run 'lankit generate' first to produce the scripts.
 
     \b
@@ -58,8 +58,8 @@ def rules(config_path, segment, unit):
         raise SystemExit(1)
 
     # Parse rules with lankit comments
-    # Comment convention: kit:<unit>:<scope>:<resource>
-    comment_re = re.compile(r'comment="(kit:[^"]+)"')
+    # Comment convention: lankit:<unit>:<scope>:<resource>
+    comment_re = re.compile(r'comment="(lankit:[^"]+)"')
 
     table = Table(box=box.SIMPLE_HEAD, show_lines=False)
     table.add_column("File", style="dim", no_wrap=True)
@@ -71,7 +71,7 @@ def rules(config_path, segment, unit):
     found = 0
     for rsc_file in rsc_files:
         text = rsc_file.read_text()
-        # Find all "add ..." blocks with kit: comments
+        # Find all "add ..." blocks with lanlankit: comments
         # Each rule is a multi-line block ending with a comment
         block_lines = []
         for line in text.splitlines():
@@ -83,7 +83,7 @@ def rules(config_path, segment, unit):
 
             m = comment_re.search(line)
             if m and block_lines:
-                tag = m.group(1)  # e.g. kit:fw:iot:deny
+                tag = m.group(1)  # e.g. lankit:fw:iot:deny
                 parts = tag.split(":")
                 tag_unit = parts[1] if len(parts) > 1 else ""
                 tag_scope = parts[2] if len(parts) > 2 else ""

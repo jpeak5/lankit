@@ -12,6 +12,13 @@
 #   8. Scoped fasttrack (internet-only, replaces defconf blanket)
 #   9. NAT masquerade for all VLAN subnets
 
+# ── Remove previously managed entries (idempotent re-apply) ─────────────────
+:foreach i in=[/ip firewall filter find where comment~"^lanlankit:"] do={ /ip firewall filter remove $i }
+:foreach i in=[/ip firewall mangle find where comment~"^lanlankit:fw:"] do={ /ip firewall mangle remove $i }
+:foreach i in=[/ip firewall nat find where comment~"^lanlankit:nat:"] do={ /ip firewall nat remove $i }
+:foreach i in=[/ip firewall address-list find where comment~"^lanlankit:fw:"] do={ /ip firewall address-list remove $i }
+:foreach i in=[/interface list member find where comment~"^lanlankit:fw:"] do={ /interface list member remove $i }
+
 # ── Add VLAN interfaces to LAN list ─────────────────────────────────────────
 # The defconf input rules accept LAN traffic. Without this, VLAN
 # traffic is dropped before it reaches our rules.
@@ -19,7 +26,7 @@
 {% for name in segments %}
 add list=LAN \
     interface=vlan-{{ name }} \
-    comment="kit:fw:{{ name }}:lan-member"
+    comment="lankit:fw:{{ name }}:lan-member"
 {% endfor %}
 
 # ── Address lists ────────────────────────────────────────────────────────────
@@ -27,15 +34,15 @@ add list=LAN \
 {% for name, seg in segments.items() %}
 add list=net-{{ name }} \
     address={{ seg.subnet }} \
-    comment="kit:fw:{{ name }}:address-list"
+    comment="lankit:fw:{{ name }}:address-list"
 {% endfor %}
 {% if include_globals %}
 add list=all-local \
     address=10.0.0.0/8 \
-    comment="kit:fw:all:local-rfc1918"
+    comment="lankit:fw:all:local-rfc1918"
 add list=all-local \
     address=192.168.88.0/24 \
-    comment="kit:fw:all:local-flat"
+    comment="lankit:fw:all:local-flat"
 
 # ── Connection mark: internet-bound traffic ──────────────────────────────────
 # Used to scope fasttrack to internet-only, not inter-segment.
@@ -46,7 +53,7 @@ add chain=forward \
     passthrough=yes \
     src-address-list=all-local \
     dst-address-list=!all-local \
-    comment="kit:fw:all:mark-internet"
+    comment="lankit:fw:all:mark-internet"
 {% endif %}
 
 /ip firewall filter
@@ -59,7 +66,7 @@ add chain=forward \
     src-address-list=net-{{ name }} \
     dst-address-list=net-{{ name }} \
     log=yes log-prefix="{{ name }}-iso" \
-    comment="kit:fw:{{ name }}:isolation"
+    comment="lankit:fw:{{ name }}:isolation"
 {% endif %}
 {% endfor %}
 
@@ -71,7 +78,7 @@ add chain=forward \
     src-address-list=net-{{ src }} \
     dst-address-list=net-{{ dst }} \
     connection-state=new \
-    comment="kit:fw:{{ src }}>{{ dst }}:permit"
+    comment="lankit:fw:{{ src }}>{{ dst }}:permit"
 {% endfor %}
 {% endfor %}
 
@@ -86,13 +93,13 @@ add chain=forward \
     src-address-list=net-{{ name }} \
     dst-address={{ dns_server_ip }} \
     dst-port=53 protocol=udp \
-    comment="kit:fw:{{ name }}>dns:permit-udp"
+    comment="lankit:fw:{{ name }}>dns:permit-udp"
 add chain=forward \
     action=accept \
     src-address-list=net-{{ name }} \
     dst-address={{ dns_server_ip }} \
     dst-port=53 protocol=tcp \
-    comment="kit:fw:{{ name }}>dns:permit-tcp"
+    comment="lankit:fw:{{ name }}>dns:permit-tcp"
 {% endif %}
 {% endfor %}
 {% endif %}
@@ -104,7 +111,7 @@ add chain=forward \
     action=accept \
     src-address-list=net-{{ name }} \
     out-interface={{ wan_interface }} \
-    comment="kit:fw:{{ name }}:egress"
+    comment="lankit:fw:{{ name }}:egress"
 {% endif %}
 {% endfor %}
 
@@ -116,7 +123,7 @@ add chain=forward \
     dst-address-list=all-local \
     connection-state=new \
     log=yes log-prefix="inter-seg-drop" \
-    comment="kit:fw:all:default-deny"
+    comment="lankit:fw:all:default-deny"
 
 # ── Scoped fasttrack — internet-only ────────────────────────────────────────
 # MANUAL STEP: disable the defconf fasttrack rule after importing this file.
@@ -126,7 +133,7 @@ add chain=forward \
     connection-state=established,related \
     connection-mark=internet-traffic \
     hw-offload=yes \
-    comment="kit:fw:all:fasttrack-internet"
+    comment="lankit:fw:all:fasttrack-internet"
 
 # ── NAT masquerade ───────────────────────────────────────────────────────────
 /ip firewall nat
@@ -135,5 +142,5 @@ add chain=srcnat \
     src-address=10.0.0.0/8 \
     out-interface={{ wan_interface }} \
     ipsec-policy=out,none \
-    comment="kit:nat:all:masquerade"
+    comment="lankit:nat:all:masquerade"
 {% endif %}
