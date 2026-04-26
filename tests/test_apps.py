@@ -4,6 +4,7 @@ apps.internal — per-persona UX tests.
 import pytest
 from playwright.sync_api import Page, expect
 
+from conftest import SCREENSHOTS_DIR
 from interfaces.apps import AppsInterface
 from mixins.first_time_visitor import FirstTimeVisitorMixin
 
@@ -53,3 +54,11 @@ class TestAppsAsAiko(AppsInterface, FirstTimeVisitorMixin):
             desc_text = cert_card.locator(".desc").inner_text()
             assert len(desc_text.strip()) > 10, \
                 "Cert download card description is too short — Aiko won't know why to install it"
+
+    def test_landing_page_visual(self, page: Page):
+        """
+        Full-page screenshot of apps.internal. Fully static — no masking needed.
+        Saved to docs/screenshots/ as living documentation.
+        """
+        page.goto(URL)
+        page.screenshot(path=SCREENSHOTS_DIR / "apps-landing.png", full_page=True)

@@ -6,6 +6,7 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
+from conftest import SCREENSHOTS_DIR
 from interfaces.register import RegisterInterface
 from mixins.first_time_visitor import FirstTimeVisitorMixin
 
@@ -32,6 +33,22 @@ class TestRegisterAsAiko(RegisterInterface, FirstTimeVisitorMixin):
         page.goto(URL)
         placeholder = page.locator("input[name='name']").get_attribute("placeholder")
         assert placeholder, "Name input has no placeholder — format expectations unclear"
+
+    def test_register_page_visual(self, page: Page):
+        """
+        Full-page screenshot of register.internal in HTTPS mode (no cert card).
+        Device IP and MAC are masked — everything else is structural.
+        Saved to docs/screenshots/ as living documentation.
+        """
+        page.goto(URL)
+        dynamic = [
+            page.locator(".stat-row", has=page.locator(".stat-label", has_text="IP address"))
+                .locator(".stat-value"),
+            page.locator(".stat-row", has=page.locator(".stat-label", has_text="Device identifier"))
+                .locator(".stat-value"),
+        ]
+        page.screenshot(path=SCREENSHOTS_DIR / "register-page.png", full_page=True,
+                        mask=dynamic)
 
 
 class TestRegisterAsSeren(RegisterInterface):
@@ -94,6 +111,26 @@ class TestRegisterAsClem(RegisterInterface):
             submit_text = page.locator("button[type='submit']").inner_text()
             assert submit_text == "Update", \
                 f"Returning device should show 'Update' button, got {submit_text!r}"
+
+    def test_success_message_visual(self, page: Page):
+        """
+        Screenshot of the HTMX result div after a successful registration.
+        Captures the green success message and me.internal link styling.
+        The device name embedded in the message is masked.
+        Saved to docs/screenshots/ as living documentation.
+        """
+        page.goto(URL)
+        page.fill("input[name='name']", "clem-snapshot-test")
+        page.locator("button[type='submit']").click()
+        page.wait_for_selector("#register-result:not(:empty)", timeout=5000)
+        result = page.locator("#register-result")
+        if result.locator(".msg-error").count() > 0:
+            pytest.skip("Registration returned an error — skipping screenshot")
+        name_strong = result.locator("strong")
+        result.screenshot(
+            path=SCREENSHOTS_DIR / "register-success.png",
+            mask=[name_strong] if name_strong.count() > 0 else [],
+        )
 
     def test_success_message_links_to_me_portal(self, page: Page):
         """

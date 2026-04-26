@@ -5,6 +5,7 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
+from conftest import SCREENSHOTS_DIR
 from interfaces.network import NetworkInterface
 
 URL = "https://network.internal"
@@ -77,6 +78,27 @@ class TestNetworkAsClem(NetworkInterface):
             has_name = len(text.strip()) > 0
             assert has_name and has_ip, \
                 f"Device entry doesn't show enough info for Clem to identify it: {text!r}"
+
+    def test_device_list_visual(self, page: Page):
+        """
+        Screenshot of the devices card after HTMX has loaded.
+        Device names, IPs, and the online/offline summary are masked (change between
+        runs) — the image documents the flex layout and status-dot colours.
+        Saved to docs/screenshots/ as living documentation.
+        """
+        page.goto(URL)
+        page.wait_for_function(
+            "() => !document.querySelector('[hx-trigger*=\"load\"]')?.innerText.includes('Loading')",
+            timeout=10000,
+        )
+        card = page.locator(".card", has=page.get_by_text("Devices"))
+        hostnames = card.locator("ul.plain li > span:first-child")
+        ips = card.locator("ul.plain li .muted")
+        summary = card.locator("p.muted")  # "N online, M offline" — counts change
+        card.screenshot(
+            path=SCREENSHOTS_DIR / "network-devices-card.png",
+            mask=[hostnames, ips, summary],
+        )
 
     def test_online_offline_status_visually_distinguishable(self, page: Page):
         """

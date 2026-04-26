@@ -7,6 +7,7 @@ scenarios specific to how that persona encounters the portal.
 import pytest
 from playwright.sync_api import Page, expect
 
+from conftest import SCREENSHOTS_DIR
 from interfaces.me import MeInterface
 from mixins.first_time_visitor import FirstTimeVisitorMixin
 
@@ -40,6 +41,32 @@ class TestMeAsKwame(MeInterface):
         # Only relevant when no bypass is active
         if blocking.get_by_text("Pause ad blocking").count() > 0:
             expect(blocking.locator("select[name='duration']")).to_be_visible()
+
+    def test_bypass_controls_visual(self, page: Page):
+        """
+        Screenshot of the ad-blocking card. Captures button colour and form layout.
+        The countdown timer is masked when a bypass is active (live seconds).
+        Saved to docs/screenshots/ as living documentation.
+        """
+        page.goto(URL)
+        page.wait_for_selector("#blocking:not(:empty)")
+        card = page.locator(".card", has=page.locator("#blocking"))
+        timer = page.locator("#blocking .msg").filter(has_text="remaining")
+        mask = [timer] if timer.count() > 0 else []
+        card.screenshot(path=SCREENSHOTS_DIR / "me-blocking-card.png", mask=mask)
+
+    def test_stats_card_visual(self, page: Page):
+        """
+        Screenshot of the stats card. Query counts and percentages are masked
+        (change with real traffic) — the image documents layout and labels.
+        Saved to docs/screenshots/ as living documentation.
+        """
+        page.goto(URL)
+        stats_card = page.locator(".card", has=page.get_by_text("Last 24 hours"))
+        stats_card.screenshot(
+            path=SCREENSHOTS_DIR / "me-stats-card.png",
+            mask=[stats_card.locator(".stat-value")],
+        )
 
 
 class TestMeAsSeren(MeInterface):
