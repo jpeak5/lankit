@@ -17,7 +17,9 @@ http://register.{{ lankit_internal_domain }}{% endif %} {
         root * /var/www/lankit-portal/apps
         file_server
     }
-    redir https://{host}{uri} 308
+    handle {
+        redir https://{host}{uri} 308
+    }
 }
 
 me.{{ lankit_internal_domain }} {

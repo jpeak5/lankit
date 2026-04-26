@@ -25,6 +25,17 @@ dependencies = [
 [project.scripts]
 lankit = "lankit.cli.__main__:cli"
 
+[project.optional-dependencies]
+test = [
+    "playwright>=1.40",
+    "pytest>=7.4",
+    "requests>=2.31",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["lankit*"]
