@@ -1,10 +1,20 @@
+"""
+Pytest fixtures for the lankit portal UX test suite.
+
+Fixture topology
+----------------
+pytest-playwright provides: browser (session-scoped), context and page
+(function-scoped). We override browser_context_args so the standard
+`page` fixture ignores TLS errors — simulating a device that has
+installed the CA cert and trusts all .internal addresses.
+
+The `untrusted_page` fixture creates a strict-TLS context for the one
+test that verifies enforcement. See its docstring for a caveat about
+running from a machine that already has the CA cert installed.
+"""
 from pathlib import Path
 import pytest
 from playwright.sync_api import Browser, Page
-
-# pytest-playwright provides: browser (session), context (function), page (function)
-# We override browser_context_args so the standard `page` fixture ignores cert errors,
-# simulating a device that has installed the CA cert.
 
 SCREENSHOTS_DIR = Path(__file__).parent.parent / "docs" / "screenshots"
 
@@ -21,7 +31,13 @@ def browser_context_args(browser_context_args):
 
 @pytest.fixture
 def untrusted_page(browser: Browser) -> Page:
-    """Strict TLS — simulates a device that has NOT installed the CA cert."""
+    """Strict TLS — simulates a device that has NOT installed the CA cert.
+
+    Caveat: if the machine running the tests has the CA cert installed in
+    its system trust store, TLS enforcement tests will produce a false pass
+    (the cert is trusted, so no error fires). Run those tests from a machine
+    or container that has not installed the cert.
+    """
     ctx = browser.new_context(ignore_https_errors=False)
     pg = ctx.new_page()
     yield pg

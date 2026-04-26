@@ -37,7 +37,8 @@ class TestRegisterAsAiko(RegisterInterface, FirstTimeVisitorMixin):
     def test_register_page_visual(self, page: Page):
         """
         Full-page screenshot of register.internal in HTTPS mode (no cert card).
-        Device IP and MAC are masked — everything else is structural.
+        IP, MAC, current name, and the pre-filled input are all masked — they
+        are device identifiers and must not appear in committed screenshots.
         Saved to docs/screenshots/ as living documentation.
         """
         page.goto(URL)
@@ -46,6 +47,9 @@ class TestRegisterAsAiko(RegisterInterface, FirstTimeVisitorMixin):
                 .locator(".stat-value"),
             page.locator(".stat-row", has=page.locator(".stat-label", has_text="Device identifier"))
                 .locator(".stat-value"),
+            page.locator(".stat-row", has=page.locator(".stat-label", has_text="Current name"))
+                .locator(".stat-value"),
+            page.locator("input[name='name']"),
         ]
         page.screenshot(path=SCREENSHOTS_DIR / "register-page.png", full_page=True,
                         mask=dynamic)
@@ -74,12 +78,15 @@ class TestRegisterAsSeren(RegisterInterface):
         """Names like 'router', 'dns', 'me' are reserved and must be refused."""
         page.goto(URL)
         for reserved in ("router", "dns", "me", "apps"):
+            # Clear the result div before each submit so the wait below
+            # always waits for fresh content rather than matching stale state.
+            page.evaluate("document.getElementById('register-result').innerHTML = ''")
             page.fill("input[name='name']", reserved)
             page.locator("button[type='submit']").click()
             page.wait_for_selector("#register-result:not(:empty)", timeout=5000)
-            expect(page.locator("#register-result .msg-error")).to_be_visible(), \
+            expect(page.locator("#register-result .msg-error")).to_be_visible()
+            assert page.locator("#register-result .msg-error").count() > 0, \
                 f"Reserved name '{reserved}' was accepted — should show an error"
-            page.fill("input[name='name']", "")
 
     def test_very_long_name_capped_by_input(self, page: Page):
         """maxlength=30 on the input prevents Seren from submitting 200-char names."""
@@ -149,9 +156,9 @@ class TestRegisterAsClem(RegisterInterface):
 
         # Success: either already named or freshly registered
         if "already named" not in result_text.lower():
-            # me.internal link should appear in success state
             me_link = result.get_by_role("link", name=re.compile(r"me\.internal"))
-            if me_link.count() > 0:
-                href = me_link.get_attribute("href")
-                assert href.startswith("https://"), \
-                    f"me.internal link in success message uses plain HTTP: {href}"
+            assert me_link.count() > 0, \
+                "Success message has no me.internal link — Clem has no next step after registering"
+            href = me_link.get_attribute("href")
+            assert href.startswith("https://"), \
+                f"me.internal link in success message uses plain HTTP: {href}"

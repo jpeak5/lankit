@@ -90,10 +90,13 @@ class FirstTimeVisitorMixin:
             f.write(r.text)
             tmp = f.name
         try:
-            out = subprocess.check_output(
-                ["openssl", "x509", "-in", tmp, "-text", "-noout"],
-                text=True, stderr=subprocess.DEVNULL,
-            )
+            try:
+                out = subprocess.check_output(
+                    ["openssl", "x509", "-in", tmp, "-text", "-noout"],
+                    text=True, stderr=subprocess.DEVNULL,
+                )
+            except FileNotFoundError:
+                pytest.skip("openssl not available — skipping CA cert structure check")
             assert "CA:TRUE" in out, \
                 "Downloaded cert is not a CA cert (no CA:TRUE in BasicConstraints) — " \
                 "wrong cert served; installing it won't establish trust"
@@ -101,17 +104,21 @@ class FirstTimeVisitorMixin:
             os.unlink(tmp)
 
     def test_cert_not_expired(self):
-        import subprocess as sp
         r = requests.get("http://apps.internal/ca.crt", timeout=5)
         with tempfile.NamedTemporaryFile(suffix=".pem", delete=False, mode="w") as f:
             f.write(r.text)
             tmp = f.name
         try:
-            result = sp.run(
-                ["openssl", "x509", "-in", tmp, "-checkend", "0"],
-                capture_output=True, text=True,
-            )
-            assert result.returncode == 0, "CA cert has already expired"
+            try:
+                result = subprocess.run(
+                    ["openssl", "x509", "-in", tmp, "-checkend", "0"],
+                    capture_output=True, text=True,
+                )
+            except FileNotFoundError:
+                pytest.skip("openssl not available — skipping cert expiry check")
+            assert result.returncode == 0, \
+                "CA cert has expired — new devices will see TLS errors after installing it " \
+                "and have no self-service path to recover"
         finally:
             os.unlink(tmp)
 

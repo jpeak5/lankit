@@ -57,8 +57,13 @@ class TestAppsAsAiko(AppsInterface, FirstTimeVisitorMixin):
 
     def test_landing_page_visual(self, page: Page):
         """
-        Full-page screenshot of apps.internal. Fully static — no masking needed.
+        Full-page screenshot of apps.internal.
+        The h1 contains the household name — masked to keep PII out of the repo.
         Saved to docs/screenshots/ as living documentation.
         """
         page.goto(URL)
-        page.screenshot(path=SCREENSHOTS_DIR / "apps-landing.png", full_page=True)
+        page.screenshot(
+            path=SCREENSHOTS_DIR / "apps-landing.png",
+            full_page=True,
+            mask=[page.locator("header h1")],
+        )

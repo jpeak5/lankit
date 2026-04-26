@@ -49,7 +49,7 @@ class TestMeAsKwame(MeInterface):
         Saved to docs/screenshots/ as living documentation.
         """
         page.goto(URL)
-        page.wait_for_selector("#blocking:not(:empty)")
+        page.wait_for_selector("#blocking:not(:empty)", timeout=10000)
         card = page.locator(".card", has=page.locator("#blocking"))
         timer = page.locator("#blocking .msg").filter(has_text="remaining")
         mask = [timer] if timer.count() > 0 else []
@@ -58,14 +58,18 @@ class TestMeAsKwame(MeInterface):
     def test_stats_card_visual(self, page: Page):
         """
         Screenshot of the stats card. Query counts and percentages are masked
-        (change with real traffic) — the image documents layout and labels.
+        (change with real traffic). Blocked domain names are also masked —
+        they are browsing history and must not appear in committed screenshots.
         Saved to docs/screenshots/ as living documentation.
         """
         page.goto(URL)
         stats_card = page.locator(".card", has=page.get_by_text("Last 24 hours"))
         stats_card.screenshot(
             path=SCREENSHOTS_DIR / "me-stats-card.png",
-            mask=[stats_card.locator(".stat-value")],
+            mask=[
+                stats_card.locator(".stat-value"),
+                stats_card.locator("ul.plain li"),  # blocked domain names = browsing history
+            ],
         )
 
 
