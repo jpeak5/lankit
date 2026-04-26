@@ -42,6 +42,10 @@ from playwright.sync_api import Page, expect
 
 _PORTALS = ["me", "network", "register", "apps"]
 
+# Direct Flask address — bypasses Caddy so the HTTP-scheme render is visible.
+# Override with LANKIT_APP_SERVER env var if the Pi's address changes.
+_APP_SERVER = os.environ.get("LANKIT_APP_SERVER", "10.40.0.3:5000")
+
 
 class FirstTimeVisitorMixin:
 
@@ -196,7 +200,7 @@ class FirstTimeVisitorMixin:
         # Hit Flask directly (port 5000) to get the HTTP-scheme render without Caddy's redirect.
         # This is the only way to see the cert card in a TLS deployment.
         try:
-            r = requests.get("http://10.40.0.3:5000/", timeout=5,
+            r = requests.get(f"http://{_APP_SERVER}/", timeout=5,
                              headers={"Host": "register.internal"})
         except requests.exceptions.ConnectionError:
             pytest.skip("Cannot reach Flask directly on port 5000 — skipping template check")
