@@ -56,7 +56,7 @@ lankit test-failsafe                 # verify auto-revert works before relying o
 
 ---
 
-## Phase 5 — Provision Pi-hole + Unbound
+## Phase 5 — Provision Pi-hole + Unbound (skip if no Pi-hole host configured)
 
 ```bash
 lankit provision                     # runs ansible/site.yml against dns_server

@@ -249,8 +249,8 @@ def _validate_cross_references(raw: dict) -> None:
     has_dns_host = dns_host is not None and dns_host.get("enabled", True)
     if not has_dns_host and not raw.get("dns_ip"):
         errors.append(
-            "  dns_ip: required when hosts.dns_server is absent or disabled — "
-            "set to a public DNS IP (e.g. '1.1.1.1') or provision a Pi-hole host"
+            "  dns_ip: required when hosts.dns_server is not present in hosts — "
+            "set to a public DNS IP (e.g. 'dns_ip: \"1.1.1.1\"') or add a Pi-hole host"
         )
 
     for seg_name, perm in raw.get("permissions", {}).items():

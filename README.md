@@ -24,7 +24,8 @@ lankit is a configuration toolkit for the MikroTik hAP ax³ that generates Route
 - Python 3.11+
 - MikroTik router (tested on hAP ax³) with SSH access enabled
 - Raspberry Pi running Raspberry Pi OS, connected to the router via ethernet
-  (hosts Pi-hole + Unbound; required for `lankit provision`)
+  (hosts Pi-hole + Unbound). Without one, set `dns_ip: "1.1.1.1"` in
+  `network.yml` and skip `lankit provision` — the router config still works.
 - Second Raspberry Pi (optional) for the app server — portals, file shares.
   Set `hosts.app_server.enabled: true` in `network.yml` when you have it.
 - graphviz system package (optional, for `lankit diagram`)
