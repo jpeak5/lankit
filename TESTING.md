@@ -99,6 +99,8 @@ pytest tests/test_me.py::TestMeAsKwame -v
 Screenshots are written to `docs/screenshots/` on each run and are
 gitignored. They serve as living documentation of the current portal UI.
 
+Open UX test gaps are tracked as GitHub issues labeled [`ux-test`](https://github.com/jpeak5/lankit/issues?q=label%3aux-test+is%3aopen).
+
 **Network prerequisites:**
 
 - DNS: `*.internal` must resolve to the app server from the machine running tests
