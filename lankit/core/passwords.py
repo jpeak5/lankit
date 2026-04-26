@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import os
 import secrets
+import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -28,6 +30,20 @@ _LANKIT_DIR = Path.home() / ".lankit"
 _VAULT_PASSWORD_FILE = _LANKIT_DIR / "vault-password"
 
 
+def _ansible_vault_bin() -> str:
+    """Find ansible-vault, preferring the same venv as the running Python."""
+    _name = "ansible-vault"
+    venv_bin = Path(sys.executable).parent / _name
+    if venv_bin.exists():
+        return str(venv_bin)
+    found = shutil.which(_name)
+    if found:
+        return found
+    raise FileNotFoundError(
+        "ansible-vault not found. Install ansible-core: pip install ansible-core"
+    )
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
 def read_vault() -> dict[str, str]:
@@ -36,7 +52,7 @@ def read_vault() -> dict[str, str]:
         return {}
     result = subprocess.run(
         [
-            "ansible-vault", "decrypt",
+            _ansible_vault_bin(), "decrypt",
             "--vault-password-file", str(_VAULT_PASSWORD_FILE),
             "--output", "-",
             str(VAULT_FILE),
@@ -81,7 +97,7 @@ def save_to_vault(passwords: dict[str, str]) -> Path:
     try:
         result = subprocess.run(
             [
-                "ansible-vault", "encrypt",
+                _ansible_vault_bin(), "encrypt",
                 "--vault-password-file", str(vp_file),
                 str(tmp_path),
             ],
@@ -123,7 +139,7 @@ def _load_from_vault(segment_names: list[str]) -> dict[str, str]:
 
     result = subprocess.run(
         [
-            "ansible-vault", "decrypt",
+            _ansible_vault_bin(), "decrypt",
             "--vault-password-file", str(_VAULT_PASSWORD_FILE),
             "--output", "-",
             str(VAULT_FILE),

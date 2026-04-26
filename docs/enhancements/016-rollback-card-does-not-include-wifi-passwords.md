@@ -24,9 +24,9 @@ Add two sections to the rollback card:
 ```
 WIFI NETWORKS
 ──────────────────────────────────────────────────────────────────────────
-  trusted        SSID: Testhouse          (see password card for key)
-  iot            SSID: Testhouse-IoT      (see password card for key)
-  guest          SSID: Testhouse-visitors (see password card for key)
+  trusted        SSID: MyHome          (see password card for key)
+  iot            SSID: MyHome-IoT      (see password card for key)
+  guest          SSID: MyHome-visitors (see password card for key)
   ...
 
   Full passwords: see the WiFi password card (lankit password-card)

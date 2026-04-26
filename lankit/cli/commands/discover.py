@@ -294,4 +294,4 @@ ssh_key: "~/.ssh/lankit"
     console.print("  1. Review and edit [bold]network.yml[/bold]")
     console.print("  2. [bold]lankit generate[/bold]   — render router scripts")
     console.print("  3. [bold]lankit apply[/bold]      — push to the router")
-    console.print("  4. [bold]lankit provision[/bold]  — set up Pi-hole + Unbound")
+    console.print("  4. [bold]lankit provision[/bold]  — set up Pi-hole + Unbound (+ app server if enabled)")

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}network.internal — {{ household_name }}{% endblock %}
+{% block content %}
+
+<header>
+  <h1>{{ household_name }}</h1>
+  <span class="subdomain">network.internal</span>
+</header>
+
+{# ── Internet / Latency ────────────────────────────────────────────────── #}
+<div class="card">
+  <p class="card-title">Internet</p>
+  {% if latency %}
+    {% for target, info in latency.items() %}
+    <div class="stat-row">
+      <span class="stat-label">{{ target }}</span>
+      <span class="stat-value">
+        {% if info.avg %}
+          {{ info.avg }} ms
+          <span class="muted" style="font-size:0.8rem;font-weight:400"> — {{ info.trend }}</span>
+        {% else %}
+          <span class="muted">no data</span>
+        {% endif %}
+      </span>
+    </div>
+    {% endfor %}
+    {% set last_target = latency.keys() | list | last %}
+    <p class="muted" style="margin-top:0.5rem">
+      Last checked {{ latency[last_target].last_at[:16] if latency[last_target].last_at else "unknown" }}
+    </p>
+  {% else %}
+    <p class="muted">Latency data not yet available — cron job runs every 5 minutes.</p>
+  {% endif %}
+</div>
+
+{# ── Speed test ────────────────────────────────────────────────────────── #}
+<div class="card">
+  <p class="card-title">Speed test</p>
+  <div id="speedtest-status"
+       hx-get="/speedtest/status"
+       hx-trigger="{{ 'every 3s' if speedtest_running else 'none' }}"
+       hx-swap="outerHTML">
+    {% include "network/speedtest_status.html" %}
+  </div>
+</div>
+
+{# ── Devices ───────────────────────────────────────────────────────────── #}
+<div class="card">
+  <p class="card-title">Devices</p>
+  <div hx-get="/devices"
+       hx-trigger="load, every 60s"
+       hx-swap="innerHTML">
+    <p class="muted">Loading…</p>
+  </div>
+</div>
+
+{% endblock %}

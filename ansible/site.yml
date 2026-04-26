@@ -6,13 +6,16 @@
 #
 # Variables (passed via --extra-vars by lankit provision):
 #   lankit_dns_server_ip      — Pi-hole host IP
+#   lankit_dns_server_gateway — gateway IP for the DNS server's VLAN (e.g. "10.40.0.1")
 #   lankit_internal_domain    — e.g. "internal"
 #   lankit_privacy_level      — 0 | 1 | 3
 #   lankit_query_retention    — e.g. "7d"
 #   lankit_dns_hosts          — newline-separated "IP hostname" pairs
 #   lankit_block_apple_relay  — "true" | "false"
 #   lankit_dnssec             — "true" | "false"
-#   lankit_dns_server_gateway — gateway IP for the DNS server's VLAN (e.g. "10.40.0.1")
+#   lankit_portals            — dict of portal name → enabled bool (e.g. {me: true, registration: true})
+#   lankit_app_server_ip      — app server host IP (empty string if not configured)
+#   household_name            — from network.yml, used in portal page titles
 
 - name: Provision DNS server (Pi-hole + Unbound)
   hosts: dns_server
@@ -22,3 +25,10 @@
     lankit_block_apple_relay: "{{ (lankit_block_apple_relay | default('false')) | bool }}"
   roles:
     - dns-server
+
+- name: Provision app server (Caddy + portal)
+  hosts: app_server
+  become: yes
+  roles:
+    - caddy
+    - portal

@@ -1,0 +1,10 @@
+{# HTMX fragment — returned by /rename #}
+{% if error %}
+  <p class="msg msg-error">{{ error }}</p>
+{% elif success %}
+  {% if unchanged %}
+    <p class="msg msg-success">Already named <strong>{{ name }}</strong> — no change needed.</p>
+  {% else %}
+    <p class="msg msg-success">Renamed to <strong>{{ name }}</strong>.</p>
+  {% endif %}
+{% endif %}

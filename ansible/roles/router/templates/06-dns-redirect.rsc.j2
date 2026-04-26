@@ -5,11 +5,14 @@
 # it to Pi-hole, regardless of what DNS server the device has hardcoded.
 # This ensures IoT devices (and others) cannot bypass Pi-hole by
 # using 8.8.8.8 or any other external resolver.
+#
+# Skipped entirely when no Pi-hole host is configured — redirecting to a
+# public DNS IP defeats the purpose of force_dns.
 
 {% set has_redirect = namespace(value=false) %}
 {% for name, seg in segments.items() %}{% if seg.force_dns %}{% set has_redirect.value = true %}{% endif %}{% endfor %}
 
-{% if has_redirect.value %}
+{% if has_redirect.value and dns_server_segment is not none %}
 /ip firewall nat
 
 {% for name, seg in segments.items() %}

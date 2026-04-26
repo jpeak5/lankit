@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — {{ household_name }}{% endblock %}
+{% block content %}
+<header>
+  <h1>{{ household_name }}</h1>
+  <span class="subdomain">{{ title }}</span>
+</header>
+<div class="card">
+  <p class="muted">{{ message }}</p>
+</div>
+{% endblock %}

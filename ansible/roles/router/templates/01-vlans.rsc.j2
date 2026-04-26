@@ -44,6 +44,7 @@ add bridge=bridge \
 set [find where interface={{ port }}] pvid=1
 {% endfor %}
 
+{% if dns_server_vlan_id is not none %}
 # ── DNS server port: untagged access to servers VLAN ────────────────────────
 # The Pi sends untagged frames; the bridge tags them to VLAN {{ dns_server_vlan_id }}.
 # Cross-VLAN DNS queries are handled by routing, not by tagging ether2 on every VLAN.
@@ -51,6 +52,7 @@ set [find where interface={{ port }}] pvid=1
 set [find where interface={{ lan_interface }}] pvid={{ dns_server_vlan_id }}
 /interface bridge vlan
 set [find where vlan-ids={{ dns_server_vlan_id }}] untagged={{ lan_interface }}
+{% endif %}
 
 # ── Enable VLAN filtering — do this LAST ────────────────────────────────────
 /interface bridge
