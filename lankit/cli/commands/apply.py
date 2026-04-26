@@ -105,6 +105,8 @@ def apply(config_path, no_generate, dry_run, script, segment):
 
     failsafe_secs = cfg.failsafe_seconds
     failsafe_name = "lankit-failsafe"
+    scheduler_installed = False
+    apply_start = None
 
     # ── Step 2: Connect and snapshot ─────────────────────────────────────────
     mode_label = f"segment [bold]{segment}[/bold]" if segment else "all segments"
@@ -137,6 +139,8 @@ def apply(config_path, no_generate, dry_run, script, segment):
             console.print(f"  Installing failsafe scheduler ({failsafe_secs}s)...")
             conn.upload(pre_config, "lankit-restore.rsc")
             conn.add_failsafe_scheduler(failsafe_name, revert_cmd, failsafe_secs)
+            scheduler_installed = True
+            apply_start = time.time()
 
             console.print(f"\nApplying {len(scripts)} script(s) ({mode_label}):")
             import_error = None
@@ -180,20 +184,43 @@ def apply(config_path, no_generate, dry_run, script, segment):
                 raise SystemExit(1)
 
             # ── Step 4: Confirm ───────────────────────────────────────────────
+            elapsed = int(time.time() - apply_start) if apply_start else 0
+            remaining = max(0, failsafe_secs - elapsed)
             console.print()
             console.print(f"[dim]Failsafe active — router will auto-revert in "
-                          f"{failsafe_secs}s if this session ends.[/dim]")
-            keep = Confirm.ask(
-                f"[bold]Keep these changes?[/bold] "
-                f"(router will retain them; 'no' rolls back to snapshot)"
-            )
+                          f"~{remaining}s if this session ends.[/dim]")
+            try:
+                keep = Confirm.ask(
+                    f"[bold]Keep these changes?[/bold] "
+                    f"(router will retain them; 'no' rolls back to snapshot)"
+                )
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Apply interrupted.[/yellow]")
+                console.print("  Attempting to cancel failsafe scheduler...")
+                cancelled = conn.cancel_failsafe_scheduler(failsafe_name)
+                if cancelled:
+                    console.print("  [green]✓[/green] Failsafe disarmed. Router retains applied changes.")
+                    console.print("  Run [bold]lankit rollback[/bold] to undo if needed.")
+                else:
+                    console.print(f"  [yellow]⚠[/yellow] Failsafe may still be active — "
+                                  f"router will auto-revert in ≤{remaining}s.")
+                    console.print(f"  Verify: ssh {cfg.router.ssh_user}@{cfg.router.ip} "
+                                  f"'/system scheduler print'")
+                raise SystemExit(0)
+
             if keep:
-                conn.cancel_failsafe_scheduler(failsafe_name)
+                cancelled = conn.cancel_failsafe_scheduler(failsafe_name)
                 # Save post-apply snapshot
                 post_config = conn.export_config()
                 post_label = f"post-apply-{segment}" if segment else "post-apply"
                 post_snap = snapshots.save(cfg.router.ip, post_config, label=post_label)
-                console.print(f"\n[green]✓[/green] Changes applied. Failsafe disarmed.")
+                if cancelled:
+                    console.print(f"\n[green]✓[/green] Changes applied. Failsafe disarmed.")
+                else:
+                    console.print(f"\n[green]✓[/green] Changes applied.")
+                    console.print(f"  [yellow]⚠[/yellow] Failsafe scheduler may still be active.")
+                    console.print(f"  Verify: ssh {cfg.router.ssh_user}@{cfg.router.ip} "
+                                  f"'/system scheduler print'")
                 console.print(f"  Post-apply snapshot: [dim]{post_snap}[/dim]")
                 console.print("  Run [bold]lankit rollback[/bold] to undo if needed.")
             else:
@@ -204,14 +231,24 @@ def apply(config_path, no_generate, dry_run, script, segment):
 
     except RouterError as e:
         console.print(f"[bold red]Router error:[/bold red] {e}")
-        console.print(f"  [dim]If the failsafe scheduler is still active it will "
-                      f"revert in ≤{failsafe_secs}s.[/dim]")
+        if scheduler_installed:
+            console.print(f"  [dim]Failsafe scheduler is active — router will "
+                          f"auto-revert in ≤{failsafe_secs}s.[/dim]")
+        else:
+            console.print("  [dim]Failsafe was not installed — use "
+                          "[bold]lankit rollback[/bold] to restore manually.[/dim]")
         raise SystemExit(1)
 
 
 def _restore_snapshot(conn, snap_path, console):
     """Upload and import a snapshot file onto the router."""
-    content = snap_path.read_text()
+    try:
+        content = snap_path.read_text()
+    except (FileNotFoundError, PermissionError, IsADirectoryError) as e:
+        console.print(f"  [bold red]Restore failed:[/bold red] Cannot read {snap_path}: {e}")
+        console.print("  Manual intervention required.")
+        console.print("  Run [bold]lankit rollback[/bold] to restore from a known-good snapshot.")
+        raise SystemExit(1)
     conn.upload(content, "lankit-restore.rsc")
     out, err = conn.run_tolerant("/import file=lankit-restore.rsc")
     if err:

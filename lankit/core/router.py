@@ -85,12 +85,13 @@ class RouterConnection:
     def add_failsafe_scheduler(self, name: str, revert_cmd: str, seconds: int) -> None:
         """Install a one-shot RouterOS scheduler job that reverts in `seconds`.
 
-        Reads the router clock via /system clock get time (returns a bare
-        HH:MM:SS value) and sets start-time = now + seconds.  interval=1d
-        is belt-and-suspenders: the on-event script self-deletes before
-        importing, so it is truly one-shot. The 1d interval only matters
-        if the self-delete somehow fails — in that case the next attempt
-        is 24 hours away rather than immediately.
+        Parses both date and time from the router clock so midnight boundaries
+        are handled correctly (start-date advances to the next day when needed).
+        interval=1d is belt-and-suspenders: the on-event script self-deletes
+        before importing, so it is truly one-shot.
+
+        Raises RouterError if the clock cannot be parsed or the scheduler
+        cannot be installed. Caller should track whether this completed.
 
         Call cancel_failsafe_scheduler() to disarm on success.
         """
@@ -98,22 +99,48 @@ class RouterConnection:
         from datetime import datetime, timedelta
 
         raw = self.run("/system clock print")
-        m = re.search(r'time:\s*(\d{1,2}):(\d{2}):(\d{2})', raw)
-        if not m:
+        date_m = re.search(r'date:\s*(\w{3})/(\d{1,2})/(\d{4})', raw)
+        time_m = re.search(r'time:\s*(\d{1,2}):(\d{2}):(\d{2})', raw)
+        if not time_m:
             raise RouterError(f"Could not parse router clock output: {raw!r}")
 
-        now = datetime(2000, 1, 1, int(m.group(1)), int(m.group(2)), int(m.group(3)))
-        fire_at = (now + timedelta(seconds=seconds)).strftime("%H:%M:%S")
+        _months = {
+            "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+        }
+        if date_m:
+            month = _months.get(date_m.group(1).lower(), 1)
+            now_dt = datetime(
+                int(date_m.group(3)), month, int(date_m.group(2)),
+                int(time_m.group(1)), int(time_m.group(2)), int(time_m.group(3)),
+            )
+        else:
+            # Date unavailable — fall back to year 2000 (midnight boundary still
+            # handled correctly within the same day; next-day case is edge-only)
+            now_dt = datetime(2000, 1, 1,
+                              int(time_m.group(1)), int(time_m.group(2)), int(time_m.group(3)))
+
+        fire_dt = now_dt + timedelta(seconds=seconds)
+        _months_rev = {v: k for k, v in _months.items()}
+        start_date = f"{_months_rev[fire_dt.month]}/{fire_dt.day:02d}/{fire_dt.year}"
+        start_time = fire_dt.strftime("%H:%M:%S")
 
         self.run(
             f'/system scheduler add name="{name}" '
-            f'start-time={fire_at} interval=1d '
-            f'on-event={{{revert_cmd}}} comment="kit:failsafe"'
+            f'start-date={start_date} start-time={start_time} interval=1d '
+            f'on-event={{{revert_cmd}}} comment="lankit:failsafe"'
         )
 
-    def cancel_failsafe_scheduler(self, name: str) -> None:
-        """Disarm the failsafe scheduler job by name (safe to call if absent)."""
+    def cancel_failsafe_scheduler(self, name: str) -> bool:
+        """Disarm the failsafe scheduler. Returns True if confirmed gone.
+
+        Safe to call when the scheduler is already absent. Returns False
+        (rather than raising) when the post-cancel read shows it still present,
+        so callers can decide how to handle the partial failure.
+        """
         self.run_tolerant(f'/system scheduler remove [find name="{name}"]')
+        out, _ = self.run_tolerant(f'/system scheduler print where name="{name}"')
+        return name not in out
 
     def export_config(self) -> str:
         """Return the full /export verbose output."""
