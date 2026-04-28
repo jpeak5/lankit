@@ -224,7 +224,10 @@ def apply(config_path, no_generate, dry_run, script, segment):
                 console.print(f"  Post-apply snapshot: [dim]{post_snap}[/dim]")
                 console.print("  Run [bold]lankit rollback[/bold] to undo if needed.")
             else:
-                conn.cancel_failsafe_scheduler(failsafe_name)
+                cancelled = conn.cancel_failsafe_scheduler(failsafe_name)
+                if not cancelled:
+                    console.print(f"  [yellow]⚠[/yellow] Failsafe may still be active — "
+                                  f"will auto-revert in ≤{remaining}s regardless.")
                 console.print("\nRolling back to pre-apply snapshot...")
                 _restore_snapshot(conn, snap_path, console)
                 console.print("[yellow]✓[/yellow] Rolled back.")
