@@ -5,10 +5,10 @@ For every resource lankit manages (VLANs, DHCP, firewall, WiFi, hosts) this comm
 compares the live router state against what network.yml specifies and classifies
 each item as:
 
-  ok       — kit: tag present and key field values match expected
+  ok       — lankit: tag present and key field values match expected
   missing  — lankit expects it but the router has nothing
-  drifted  — kit: tag present but a key field was changed after apply
-  rogue    — resource exists on the router with no kit: tag at all
+  drifted  — lankit: tag present but a key field was changed after apply
+  rogue    — resource exists on the router with no lankit: tag at all
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def _split_records(output: str) -> list[dict[str, str]]:
 @dataclass
 class AuditResult:
     name: str                   # human label (e.g. "trusted", "trusted→work")
-    tag: Optional[str]          # expected kit: tag (None for rogues)
+    tag: Optional[str]          # expected lankit: tag (None for rogues)
     status: str                 # ok | missing | drifted | rogue
     detail: str                 # what's wrong, or "" if ok
 
@@ -115,7 +115,7 @@ def _audit_vlans(cfg, conn) -> list[AuditResult]:
     results = []
 
     for name, seg in cfg.segments.items():
-        tag = f"kit:vlan:{name}:interface"
+        tag = f"lankit:vlan:{name}:interface"
         expected_fields = {
             "vlan-id": str(seg.vlan_id),
             "interface": "bridge",
@@ -127,11 +127,11 @@ def _audit_vlans(cfg, conn) -> list[AuditResult]:
             drift = _check_drift(match, expected_fields)
             results.append(AuditResult(name, tag, "ok" if not drift else "drifted", drift))
 
-    # Rogues: VLAN interfaces without any kit: tag
-    kit_tags = {f"kit:vlan:{n}:interface" for n in cfg.segments}
+    # Rogues: VLAN interfaces without any lankit: tag
+    kit_tags = {f"lankit:vlan:{n}:interface" for n in cfg.segments}
     for rec in records:
         comment = rec.get("comment", "")
-        if not comment.startswith("kit:") or comment not in kit_tags:
+        if not comment.startswith("lankit:") or comment not in kit_tags:
             rogue_name = rec.get("name", "?")
             # Skip master interfaces (not created by lankit)
             if not rogue_name.startswith("_master"):
@@ -149,7 +149,7 @@ def _audit_ip_addresses(cfg, conn) -> list[AuditResult]:
     results = []
 
     for name, seg in cfg.segments.items():
-        tag = f"kit:dhcp:{name}:address"
+        tag = f"lankit:dhcp:{name}:address"
         expected_fields = {
             "address": f"{seg.gateway}/24",
             "interface": f"vlan-{name}",
@@ -161,12 +161,12 @@ def _audit_ip_addresses(cfg, conn) -> list[AuditResult]:
             drift = _check_drift(match, expected_fields)
             results.append(AuditResult(name, tag, "ok" if not drift else "drifted", drift))
 
-    # Rogues: IPs on vlan-* interfaces without kit: tag
-    kit_tags = {f"kit:dhcp:{n}:address" for n in cfg.segments}
+    # Rogues: IPs on vlan-* interfaces without lankit: tag
+    kit_tags = {f"lankit:dhcp:{n}:address" for n in cfg.segments}
     for rec in records:
         comment = rec.get("comment", "")
         iface = rec.get("interface", "")
-        if iface.startswith("vlan-") and (not comment.startswith("kit:") or comment not in kit_tags):
+        if iface.startswith("vlan-") and (not comment.startswith("lankit:") or comment not in kit_tags):
             results.append(AuditResult(
                 rec.get("address", "?"), None, "rogue",
                 f"interface={iface}"
@@ -181,7 +181,7 @@ def _audit_dhcp_pools(cfg, conn) -> list[AuditResult]:
     results = []
 
     for name, seg in cfg.segments.items():
-        tag = f"kit:dhcp:{name}:pool"
+        tag = f"lankit:dhcp:{name}:pool"
         expected_fields = {"ranges": seg.pool_range}
         match = _find_by_tag(records, tag)
         if match is None:
@@ -199,7 +199,7 @@ def _audit_dhcp_servers(cfg, conn) -> list[AuditResult]:
     results = []
 
     for name, seg in cfg.segments.items():
-        tag = f"kit:dhcp:{name}:server"
+        tag = f"lankit:dhcp:{name}:server"
         expected_fields = {"interface": f"vlan-{name}"}
         match = _find_by_tag(records, tag)
         if match is None:
@@ -208,12 +208,12 @@ def _audit_dhcp_servers(cfg, conn) -> list[AuditResult]:
             drift = _check_drift(match, expected_fields)
             results.append(AuditResult(name, tag, "ok" if not drift else "drifted", drift))
 
-    # Rogues: DHCP servers on vlan-* without kit: tag
-    kit_tags = {f"kit:dhcp:{n}:server" for n in cfg.segments}
+    # Rogues: DHCP servers on vlan-* without lankit: tag
+    kit_tags = {f"lankit:dhcp:{n}:server" for n in cfg.segments}
     for rec in records:
         comment = rec.get("comment", "")
         iface = rec.get("interface", "")
-        if iface.startswith("vlan-") and (not comment.startswith("kit:") or comment not in kit_tags):
+        if iface.startswith("vlan-") and (not comment.startswith("lankit:") or comment not in kit_tags):
             results.append(AuditResult(
                 rec.get("name", "?"), None, "rogue",
                 f"interface={iface}"
@@ -226,7 +226,7 @@ def _audit_dhcp_lease(cfg, conn) -> list[AuditResult]:
     """Check the static DNS server lease."""
     out, _ = conn.run_tolerant("/ip dhcp-server lease print detail without-paging")
     records = _split_records(out)
-    tag = "kit:dhcp:dns-server:lease"
+    tag = "lankit:dhcp:dns-server:lease"
     dns = cfg.hosts.get("dns_server")
     if not dns:
         return []
@@ -251,7 +251,7 @@ def _audit_dhcp_lease(cfg, conn) -> list[AuditResult]:
 def _audit_firewall(cfg, conn) -> list[AuditResult]:
     """
     Firewall audit: check tag presence for all expected filter rules.
-    Rogue detection: forward-chain rules without kit: comment.
+    Rogue detection: forward-chain rules without lankit: comment.
     No field-level drift — rule positions are fragile and order-dependent.
     """
     out, _ = conn.run_tolerant("/ip firewall filter print detail without-paging")
@@ -268,11 +268,11 @@ def _audit_firewall(cfg, conn) -> list[AuditResult]:
         else:
             results.append(AuditResult(label, tag, "missing", ""))
 
-    # Rogues: forward-chain rules without any kit: comment
+    # Rogues: forward-chain rules without any lankit: comment
     for rec in records:
         comment = rec.get("comment", "")
         chain = rec.get("chain", "")
-        if chain == "forward" and not comment.startswith("kit:") and not comment.startswith("defconf"):
+        if chain == "forward" and not comment.startswith("lankit:") and not comment.startswith("defconf"):
             results.append(AuditResult(
                 comment or "(no comment)", None, "rogue",
                 f"chain={chain} action={rec.get('action','?')}"
@@ -284,7 +284,7 @@ def _audit_firewall(cfg, conn) -> list[AuditResult]:
     live_al_tags = {rec.get("comment", "") for rec in records_al}
 
     for name in cfg.segments:
-        tag = f"kit:fw:{name}:address-list"
+        tag = f"lankit:fw:{name}:address-list"
         label = f"{name} address-list"
         if tag in live_al_tags:
             results.append(AuditResult(label, tag, "ok", ""))
@@ -293,21 +293,21 @@ def _audit_firewall(cfg, conn) -> list[AuditResult]:
 
     # Global address lists
     for tag, label in [
-        ("kit:fw:all:local-rfc1918", "all-local RFC1918"),
-        ("kit:fw:all:local-flat",    "all-local flat"),
+        ("lankit:fw:all:local-rfc1918", "all-local RFC1918"),
+        ("lankit:fw:all:local-flat",    "all-local flat"),
     ]:
         status = "ok" if tag in live_al_tags else "missing"
         results.append(AuditResult(label, tag, status, ""))
 
-    # Rogue address-list entries (on net-* or all-local without kit: tag)
-    kit_al_tags = {f"kit:fw:{n}:address-list" for n in cfg.segments} | {
-        "kit:fw:all:local-rfc1918", "kit:fw:all:local-flat"
+    # Rogue address-list entries (on net-* or all-local without lankit: tag)
+    kit_al_tags = {f"lankit:fw:{n}:address-list" for n in cfg.segments} | {
+        "lankit:fw:all:local-rfc1918", "lankit:fw:all:local-flat"
     }
     for rec in records_al:
         comment = rec.get("comment", "")
         lst = rec.get("list", "")
         if (lst.startswith("net-") or lst == "all-local") and \
-                (not comment.startswith("kit:") or comment not in kit_al_tags):
+                (not comment.startswith("lankit:") or comment not in kit_al_tags):
             results.append(AuditResult(
                 f"{lst}={rec.get('address','?')}", None, "rogue", f"list={lst}"
             ))
@@ -328,7 +328,7 @@ def _audit_wifi(cfg, conn) -> list[AuditResult]:
         for band, tag_suffix in [("5ghz", "ap-5g"), ("2ghz", "ap-2g")]:
             if band not in seg.wifi_bands:
                 continue
-            tag = f"kit:wifi:{name}:{tag_suffix}"
+            tag = f"lankit:wifi:{name}:{tag_suffix}"
             match = _find_by_tag(records, tag)
             if match is None:
                 results.append(AuditResult(f"{name} ({band})", tag, "missing", ""))
@@ -343,19 +343,19 @@ def _audit_wifi(cfg, conn) -> list[AuditResult]:
                 else:
                     results.append(AuditResult(f"{name} ({band})", tag, "ok", ""))
 
-    # Rogues: wifi interfaces that aren't masters and have no kit: tag
+    # Rogues: wifi interfaces that aren't masters and have no lankit: tag
     kit_tags = set()
     for name, seg in cfg.segments.items():
         if seg.has_wifi:
             for suffix in ("ap-5g", "ap-2g"):
-                kit_tags.add(f"kit:wifi:{name}:{suffix}")
+                kit_tags.add(f"lankit:wifi:{name}:{suffix}")
 
     for rec in records:
         comment = rec.get("comment", "")
         iface_name = rec.get("name", "")
         if iface_name.startswith("_master") or iface_name in ("wifi1", "wifi2"):
             continue
-        if not comment.startswith("kit:") or comment not in kit_tags:
+        if not comment.startswith("lankit:") or comment not in kit_tags:
             results.append(AuditResult(
                 iface_name, None, "rogue",
                 f"ssid={rec.get('configuration.ssid') or rec.get('ssid','?')}"
@@ -375,7 +375,7 @@ def _audit_wifi_security(cfg, conn) -> list[AuditResult]:
     for name, seg in cfg.segments.items():
         if not seg.has_wifi:
             continue
-        tag = f"kit:wifi:{name}:security"
+        tag = f"lankit:wifi:{name}:security"
         kit_tags.add(tag)
         match = _find_by_tag(records, tag)
         if match is None:
@@ -383,10 +383,10 @@ def _audit_wifi_security(cfg, conn) -> list[AuditResult]:
         else:
             results.append(AuditResult(f"{name} security profile", tag, "ok", ""))
 
-    # Rogues: security profiles without a kit: tag
+    # Rogues: security profiles without a lankit: tag
     for rec in records:
         comment = rec.get("comment", "")
-        if not comment.startswith("kit:") or comment not in kit_tags:
+        if not comment.startswith("lankit:") or comment not in kit_tags:
             results.append(AuditResult(
                 rec.get("name", "?"), None, "rogue",
                 f"comment={comment!r}" if comment else "no comment"
@@ -420,20 +420,20 @@ def _expected_filter_tags(cfg) -> list[tuple[str, str]]:
 
     for name, seg in cfg.segments.items():
         if seg.client_isolation:
-            pairs.append((f"kit:fw:{name}:isolation", f"{name} isolation"))
+            pairs.append((f"lankit:fw:{name}:isolation", f"{name} isolation"))
         if seg.dns != "none":
-            pairs.append((f"kit:fw:{name}>dns:permit-udp", f"{name}→dns UDP"))
-            pairs.append((f"kit:fw:{name}>dns:permit-tcp", f"{name}→dns TCP"))
+            pairs.append((f"lankit:fw:{name}>dns:permit-udp", f"{name}→dns UDP"))
+            pairs.append((f"lankit:fw:{name}>dns:permit-tcp", f"{name}→dns TCP"))
         if seg.internet in ("full", "egress_only"):
-            pairs.append((f"kit:fw:{name}:egress", f"{name} egress"))
+            pairs.append((f"lankit:fw:{name}:egress", f"{name} egress"))
 
     for src, perm in cfg.permissions.items():
         for dst in perm.can_reach:
-            pairs.append((f"kit:fw:{src}>{dst}:permit", f"{src}→{dst}"))
+            pairs.append((f"lankit:fw:{src}>{dst}:permit", f"{src}→{dst}"))
 
     pairs += [
-        ("kit:fw:all:default-deny",        "default deny"),
-        ("kit:fw:all:fasttrack-internet",   "fasttrack internet"),
+        ("lankit:fw:all:default-deny",        "default deny"),
+        ("lankit:fw:all:fasttrack-internet",   "fasttrack internet"),
     ]
     return pairs
 
@@ -466,8 +466,8 @@ def audit(config_path, section, rogue_only, problems):
     \b
       ✓ ok       — present and matches expected config
       ✗ missing  — lankit expects it but it's not on the router
-      ~ drifted  — kit: tag present, but a key field was changed
-      ! rogue    — exists on the router with no kit: tag
+      ~ drifted  — lankit: tag present, but a key field was changed
+      ! rogue    — exists on the router with no lankit: tag
 
     Sections: vlans, dhcp (address/pool/server/lease), firewall, wifi.
 
