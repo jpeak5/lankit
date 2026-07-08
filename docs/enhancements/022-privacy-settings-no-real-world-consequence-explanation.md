@@ -1,6 +1,6 @@
 # ENH-022: Privacy settings explain mechanics but not real-world consequences
 
-**Persona(s):** Morgan, Jordan
+**Persona(s):** Dale, Renata
 **Surface:** network.yml
 **Priority:** Medium
 
@@ -8,11 +8,11 @@
 
 The `privacy` section of `network.yml` has good inline comments that explain what each option does technically. For example, `query_logging: full` is described as "logs which device looked up which domain, and when." However, the comments don't explain the privacy consequences in terms a non-technical user cares about:
 
-- Does Pi-hole send this data anywhere? (No — but Morgan doesn't know that.)
+- Does Pi-hole send this data anywhere? (No — but Dale doesn't know that.)
 - Who can access the logs? (Controlled by `dashboard_visibility` — but the link between these two settings is not explained.)
 - What does "anonymous" mean practically — can it be de-anonymized? (No — but it's not stated.)
 
-Morgan's core motivation is ISP privacy. The comments focus on "what the DNS server records" without connecting it to "what your ISP sees." She doesn't know that Unbound's full recursive resolution means her ISP never sees individual queries — that's in DESIGN.md but not surfaced at the decision point in network.yml.
+Dale's core motivation is ISP privacy. The comments focus on "what the DNS server records" without connecting it to "what your ISP sees." She doesn't know that Unbound's full recursive resolution means her ISP never sees individual queries — that's in DESIGN.md but not surfaced at the decision point in network.yml.
 
 ## Proposed fix
 

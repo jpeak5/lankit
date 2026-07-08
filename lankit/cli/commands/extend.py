@@ -9,8 +9,9 @@ def extend(config_path):
     """Interactive wizard to add a new network segment to network.yml.
 
     Walks through the required fields for a new segment, validates for
-    conflicts (VLAN ID, subnet), and writes the updated network.yml.
-    Does not apply changes — run 'lankit apply' after.
+    conflicts (VLAN ID, subnet), asks which existing segments may reach
+    the new one (written to the permissions block), and writes the
+    updated network.yml. Does not apply changes — run 'lankit apply' after.
 
     \b
     Workflow:
@@ -112,6 +113,23 @@ def extend(config_path):
         bw_up = bw_up_str if bw_up_str else None
         bw_down = bw_down_str if bw_down_str else None
 
+    # Permissions: which existing segments may initiate to the new one
+    while True:
+        reach_input = Prompt.ask(
+            f"Which existing segments should be able to reach '{name}'?\n"
+            f"(space or comma separated, e.g. trusted servers — Enter for none)",
+            default="",
+        )
+        reachers = [s for s in reach_input.replace(",", " ").split() if s]
+        # de-duplicate, preserve order
+        reachers = list(dict.fromkeys(reachers))
+        unknown = [s for s in reachers if s not in existing_names]
+        if unknown:
+            console.print(f"[red]Unknown segment(s): {', '.join(unknown)}. "
+                          f"Existing segments: {', '.join(sorted(existing_names))}[/red]")
+            continue
+        break
+
     # ── Preview ───────────────────────────────────────────────────────────────
     console.print(f"\n[bold]New segment:[/bold]")
     console.print(f"  name:             {name}")
@@ -122,6 +140,7 @@ def extend(config_path):
     console.print(f"  force_dns:        {force_dns}")
     console.print(f"  internet:         {internet}")
     console.print(f"  client_isolation: {client_isolation}")
+    console.print(f"  reachable from:   {', '.join(reachers) if reachers else '(no other segments)'}")
 
     if not Confirm.ask("\nAdd this segment to network.yml?", default=True):
         console.print("[dim]Cancelled.[/dim]")
@@ -148,10 +167,35 @@ def extend(config_path):
         "client_isolation": client_isolation,
     }
 
+    # Update permissions: let each chosen segment reach the new one
+    if reachers:
+        from ruamel.yaml.comments import CommentedMap, CommentedSeq
+        permissions = raw.setdefault("permissions", CommentedMap())
+        for granter in reachers:
+            entry = permissions.get(granter)
+            if entry is not None and entry.get("can_reach") is not None:
+                if name not in entry["can_reach"]:
+                    entry["can_reach"].append(name)
+                continue
+            can_reach = CommentedSeq([name])
+            can_reach.fa.set_flow_style()
+            if entry is None:
+                new_entry = CommentedMap()
+                new_entry["can_reach"] = can_reach
+                # Insert at the head of the map: trailing comments in the
+                # permissions block are attached to the last existing entry,
+                # so appending at the end would dump the new entry after
+                # them (below the next section header).
+                permissions.insert(0, granter, new_entry)
+            else:
+                entry["can_reach"] = can_reach
+
     with open(config_file, "w") as f:
         _yaml.dump(raw, f)
 
     console.print(f"\n[green]✓[/green] Added segment [bold]{name}[/bold] to {config_file}")
+    if reachers:
+        console.print(f"[green]✓[/green] Permissions updated: {', '.join(reachers)} can reach {name}")
     console.print("\nNext steps:")
     console.print(f"  lankit generate   # preview scripts")
     console.print(f"  lankit apply      # push to router")

@@ -1,6 +1,6 @@
 # ENH-017: `lankit probe` forward-chain caveat is repeated twice and demotivating
 
-**Persona(s):** Sam, Alex
+**Persona(s):** Tariq, Priya
 **Surface:** CLI — `lankit probe`
 **Priority:** Low
 
@@ -17,7 +17,7 @@ the rules are deployed, not that they work as intended.
 Run: lankit matrix  to review the expected policy.
 ```
 
-This important caveat is correct, but printing it on every run is noise for users who already understand it (Sam). For Alex, seeing "cannot confirm their effect on live traffic" after what looked like a successful probe is confusing — he doesn't know if his setup is broken or if this is always printed.
+This important caveat is correct, but printing it on every run is noise for users who already understand it (Tariq). For Priya, seeing "cannot confirm their effect on live traffic" after what looked like a successful probe is confusing — he doesn't know if his setup is broken or if this is always printed.
 
 The same caveat also appears verbatim in the `--help` text. It's prominent in exactly the wrong place (after success) without a clear signal about whether it matters for his current situation.
 

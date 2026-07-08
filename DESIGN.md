@@ -1,6 +1,6 @@
 # lankit — Design Document
 
-A distributable, self-documenting home network segmentation toolkit for MikroTik routers with Pi-hole DNS filtering. Aimed at technical people who appreciate craft and will invest up to 10 hours for agency over their home network.
+A distributable, self-documenting home network segmentation toolkit for MikroTik routers with Pi-hole DNS filtering. Setting it up means working at a terminal and editing a config file, and taking roughly ten hours to do it once — in exchange for real, reproducible control over your home network.
 
 ---
 

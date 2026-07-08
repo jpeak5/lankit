@@ -1,6 +1,6 @@
 # ENH-007: `lankit overview` silently accepts a partially-filled network.yml
 
-**Persona(s):** Alex, Morgan
+**Persona(s):** Priya, Dale
 **Surface:** CLI — `lankit overview` (status.py), `network.yml`
 **Priority:** Medium
 

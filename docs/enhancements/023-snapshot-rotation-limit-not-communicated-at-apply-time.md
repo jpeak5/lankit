@@ -1,6 +1,6 @@
 # ENH-023: Snapshot rotation limit (10 per router) is not communicated at apply time
 
-**Persona(s):** Riley, Sam, Jordan
+**Persona(s):** Yemi, Tariq, Renata
 **Surface:** CLI — `lankit apply`, `lankit snapshots`
 **Priority:** Low
 
@@ -8,7 +8,7 @@
 
 Snapshots are capped at 10 per router (mentioned only in `lankit snapshots --help`). Every `lankit apply` creates two snapshots (pre-apply and post-apply), meaning after 5 apply runs the oldest snapshots silently disappear.
 
-Riley, returning after 6 months, runs `lankit rollback` expecting to get her 6-month-old config and instead gets the most recent pre-apply snapshot from 3 days ago. The old "known good" config is gone and she has no way to know it existed.
+Yemi, returning after 6 months, runs `lankit rollback` expecting to get her 6-month-old config and instead gets the most recent pre-apply snapshot from 3 days ago. The old "known good" config is gone and she has no way to know it existed.
 
 There is no warning when a snapshot is about to be rotated out, no way to "pin" a snapshot, and no mention of the rotation limit at apply time.
 

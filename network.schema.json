@@ -79,7 +79,8 @@
 
     "vpn": {
       "type": "string",
-      "enum": ["wireguard", "ipsec", "none"]
+      "enum": ["wireguard", "ipsec", "none"],
+      "description": "Remote-access VPN choice. Not yet implemented for wireguard/ipsec (tracked in GitHub issue #12) — choose 'none' until support lands."
     },
 
     "dnssec": {

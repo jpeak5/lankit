@@ -1,6 +1,6 @@
 # ENH-003: ConfigError for missing network.yml doesn't tell user how to create one
 
-**Persona(s):** Alex, Morgan
+**Persona(s):** Priya, Dale
 **Surface:** CLI — all commands, `lankit/core/config.py`
 **Priority:** High
 
@@ -13,13 +13,13 @@ Config error: network.yml not found.
 Run lankit from your lankit directory, or set LANKIT_CONFIG.
 ```
 
-The message assumes the user knows what "your lankit directory" means and that `network.yml` is something they need to create. A first-time user (Alex just cloned the repo; Morgan following a blog post) has no idea:
+The message assumes the user knows what "your lankit directory" means and that `network.yml` is something they need to create. A first-time user (Priya just cloned the repo; Dale following a blog post) has no idea:
 
 - That they need to copy or create `network.yml` before any command works
 - That the repo ships a template they can start from
 - That `lankit discover --new` exists as a guided wizard alternative
 
-The error also surfaces for returning users (Riley) who have accidentally changed directories.
+The error also surfaces for returning users (Yemi) who have accidentally changed directories.
 
 ## Proposed fix
 

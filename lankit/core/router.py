@@ -8,6 +8,8 @@ Used by apply, commit, rollback, discover, and test-failsafe commands.
 
 from __future__ import annotations
 
+import errno
+import socket
 import time
 from pathlib import Path
 from typing import Optional
@@ -42,8 +44,56 @@ class RouterConnection:
                 look_for_keys=False,
             )
         except Exception as e:
-            raise RouterError(f"Cannot connect to {self.ip} as {self.ssh_user}: {e}") from e
+            raise self._classify_connect_error(e) from e
         return self
+
+    def _classify_connect_error(self, e: Exception) -> RouterError:
+        """Turn a raw connection exception into a RouterError with a diagnosis.
+
+        Classifies into auth failure, no route, and refused/timeout; anything
+        unrecognised falls back to the generic message.
+        """
+        text = str(e) or e.__class__.__name__
+        low = text.lower()
+
+        # Authentication: rejected key, bad/encrypted key file, passphrase
+        if isinstance(e, paramiko.AuthenticationException) or (
+            "private key" in low and "not a valid" in low
+        ) or "passphrase" in low:
+            return RouterError(
+                f"Authentication failed for {self.ssh_user}@{self.ip} ({text})\n"
+                "lankit uses key-based SSH auth. Check:\n"
+                f"  • Key path (router.ssh_key in network.yml): {self.ssh_key}\n"
+                f"  • Key permissions: chmod 600 {self.ssh_key}\n"
+                f"  • Test by hand: ssh -i {self.ssh_key} {self.ssh_user}@{self.ip}"
+            )
+
+        # No route: laptop can't even reach the router's subnet
+        if (
+            isinstance(e, OSError)
+            and getattr(e, "errno", None) in (errno.EHOSTUNREACH, errno.ENETUNREACH)
+        ) or "no route to host" in low or "network is unreachable" in low:
+            return RouterError(
+                f"No route to {self.ip} ({text})\n"
+                f"The router IP in network.yml ({self.ip}) is unreachable from here.\n"
+                "  • Is this machine on the router's LAN (not guest WiFi or a VPN)?\n"
+                "  • Has the router's IP address changed?"
+            )
+
+        # Refused / timed out: router off, wrong network, or SSH disabled
+        if isinstance(e, (TimeoutError, ConnectionRefusedError, socket.timeout)) or (
+            isinstance(e, paramiko.SSHException)
+            and ("timed out" in low or "timeout" in low)
+        ) or "connection refused" in low or "timed out" in low:
+            return RouterError(
+                f"Could not connect to {self.ip} ({text})\n"
+                "Is the router powered on and reachable?\n"
+                f"  • Try pinging it: ping {self.ip}\n"
+                "  • Are you on the right network? (not a VPN, not guest WiFi)\n"
+                "  • Is SSH enabled on the router? RouterOS: /ip service enable ssh"
+            )
+
+        return RouterError(f"Cannot connect to {self.ip} as {self.ssh_user}: {text}")
 
     def __exit__(self, *args) -> None:
         if self._client:

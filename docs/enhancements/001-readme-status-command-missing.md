@@ -1,6 +1,6 @@
 # ENH-001: README quick-start references `lankit status` which doesn't exist
 
-**Persona(s):** Alex, Morgan, Riley
+**Persona(s):** Priya, Dale, Yemi
 **Surface:** README.md, CLI
 **Priority:** High
 
@@ -12,7 +12,7 @@ The README Quick Start section (line 47) instructs the user to run `lankit statu
 Error: No such command 'status'.
 ```
 
-with no suggestion for what the correct command is. This is the very first CLI interaction the README prescribes, so it immediately breaks trust for Alex and Morgan before they've done anything useful.
+with no suggestion for what the correct command is. This is the very first CLI interaction the README prescribes, so it immediately breaks trust for Priya and Dale before they've done anything useful.
 
 ## Proposed fix
 

@@ -15,17 +15,20 @@ dependencies = [
     "paramiko>=3.0",       # SSH to router and Pi
     "jinja2>=3.1",         # template rendering
     "mac-vendor-lookup>=0.1.15",
-    "pytest-testinfra>=10.0",
     "graphviz>=0.20",      # Python wrapper; system graphviz binary optional
     "rich>=13.0",          # terminal output: tables, trees, status
     "ruamel.yaml>=0.18",   # comment-preserving YAML read/write (extend wizard)
-    "weasyprint>=60.0",    # rollback card PDF generation
 ]
 
 [project.scripts]
 lankit = "lankit.cli.__main__:cli"
 
 [project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.12",
+]
 test = [
     "playwright>=1.40",
     "pytest-playwright>=0.5",
@@ -34,7 +37,10 @@ test = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# Default run is the offline unit suite only. The Playwright portal suite
+# (tests/test_*.py) needs live portals — run it explicitly: pytest tests/ -v
+# (see TESTING.md Phase 6).
+testpaths = ["tests/unit"]
 pythonpath = ["tests"]
 
 [tool.setuptools.packages.find]

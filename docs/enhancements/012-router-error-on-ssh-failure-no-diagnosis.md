@@ -1,6 +1,6 @@
 # ENH-012: Router SSH connection failure prints generic error with no diagnosis steps
 
-**Persona(s):** Alex, Morgan, Riley
+**Persona(s):** Priya, Dale, Yemi
 **Surface:** CLI — `lankit apply`, `lankit audit`, `lankit probe`, any command that connects to the router
 **Priority:** High
 
@@ -18,7 +18,7 @@ The raw exception message is typically one of:
 - `No route to host`
 - `timed out`
 
-None of these tell the user what to check. Alex has never configured SSH keys. Morgan doesn't know what "authentication failed" means in context. Riley remembers that SSH "used to work" but doesn't know why it stopped after the firmware update.
+None of these tell the user what to check. Priya has never configured SSH keys. Dale doesn't know what "authentication failed" means in context. Yemi remembers that SSH "used to work" but doesn't know why it stopped after the firmware update.
 
 The `RouterError` wrapper in `apply.py` adds one extra line: "If the failsafe scheduler is still active it will revert in ≤120s." — but only for `apply`. Other commands just print the error and exit.
 

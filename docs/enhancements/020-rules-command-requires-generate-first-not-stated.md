@@ -1,6 +1,6 @@
 # ENH-020: `lankit rules` silently shows nothing if `lankit generate` hasn't been run
 
-**Persona(s):** Sam, Alex
+**Persona(s):** Tariq, Priya
 **Surface:** CLI — `lankit rules`
 **Priority:** Medium
 
@@ -8,7 +8,7 @@
 
 `lankit rules` parses generated `.rsc` files in `ansible/generated/`. If that directory doesn't exist or is empty (first-time setup, or after cloning), the command produces no output or a misleading message, with no explanation.
 
-The help text says "Run 'lankit generate' first to produce the scripts" — but this is only visible if the user reads `--help`. Running `lankit rules` cold, as Sam likely does when exploring the tool, produces nothing actionable.
+The help text says "Run 'lankit generate' first to produce the scripts" — but this is only visible if the user reads `--help`. Running `lankit rules` cold, as Tariq likely does when exploring the tool, produces nothing actionable.
 
 The same applies to `lankit diagram`, which also depends on generated files.
 

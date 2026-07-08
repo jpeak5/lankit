@@ -1,6 +1,6 @@
 # ENH-018: README install section has no verification step
 
-**Persona(s):** Alex, Morgan
+**Persona(s):** Priya, Dale
 **Surface:** README.md
 **Priority:** Medium
 

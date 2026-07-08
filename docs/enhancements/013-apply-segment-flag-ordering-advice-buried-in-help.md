@@ -1,6 +1,6 @@
 # ENH-013: `--segment` recommended order buried in help text, not enforced or prompted
 
-**Persona(s):** Alex, Sam
+**Persona(s):** Priya, Tariq
 **Surface:** CLI — `lankit apply --segment`
 **Priority:** Medium
 

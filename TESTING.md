@@ -11,7 +11,7 @@ Fill in `network.yml` first: `household_name`, `hosts`, `router.ip`, and all
 `CHOOSE` fields. Then:
 
 ```bash
-lankit status                        # verify network.yml reads correctly
+lankit overview                      # verify network.yml reads correctly
 lankit generate                      # render scripts to ansible/generated/
 lankit diagram --view                # visual sanity check
 lankit rollback-card                 # generate and print before you need it
@@ -116,22 +116,9 @@ Open UX test gaps are tracked as GitHub issues labeled [`ux-test`](https://githu
 
 ## Known rough edges to flag
 
-- `lankit extend` uses `yaml.dump` to write back `network.yml`, which may
-  reorder keys. Review the diff before committing.
-- `lankit apply` uploads `.rsc` files via SFTP to `/tmp/` on the router.
-  RouterOS purges `/tmp/` on reboot — no cleanup needed.
+- `lankit apply` uploads `.rsc` files via SFTP to the router's flash root
+  (RouterOS SFTP has no `/tmp`). Uploaded files persist and can be listed
+  with `/file print`.
 - `lankit discover --new` wizard writes a minimal `network.yml`. The full
   template in the repo has more segments and inline docs — consider using
   it as the base instead and filling in your values.
-
----
-
-## After testing — before creating the repo
-
-Things worth addressing based on real-world findings:
-
-- [ ] Note any commands that failed or had unexpected output
-- [ ] Note any `network.yml` fields that were confusing
-- [ ] Note any missing `lankit` commands you reached for
-- [ ] Check whether `configure-pihole.py` needs `toml` or can use stdlib `tomllib` (Python 3.11+)
-- [ ] Decide whether `lankit extend`'s yaml.dump behaviour is acceptable

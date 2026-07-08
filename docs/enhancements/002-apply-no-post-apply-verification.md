@@ -1,6 +1,6 @@
 # ENH-002: `lankit apply` has no post-apply health check
 
-**Persona(s):** Alex, Morgan, Jordan, Riley
+**Persona(s):** Priya, Dale, Renata, Yemi
 **Surface:** CLI — `lankit apply`
 **Priority:** High
 
@@ -14,7 +14,7 @@ After `lankit apply` succeeds and the user answers "Keep these changes?", the ou
   Run lankit rollback to undo if needed.
 ```
 
-There is no indication of whether the router is actually functioning correctly. The user has no signal that VLANs are up, DHCP is serving, or DNS is reachable. Alex and Morgan are left wondering "did this work?" and are likely to re-read docs or google rather than run the obvious follow-up. Riley, returning after months, wants confirmation that nothing broke.
+There is no indication of whether the router is actually functioning correctly. The user has no signal that VLANs are up, DHCP is serving, or DNS is reachable. Priya and Dale are left wondering "did this work?" and are likely to re-read docs or google rather than run the obvious follow-up. Yemi, returning after months, wants confirmation that nothing broke.
 
 The failsafe window (120s by default) was the only verification window — once the user answers "yes", it's gone.
 

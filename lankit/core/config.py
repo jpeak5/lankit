@@ -165,9 +165,21 @@ def _resolve_path(path: Optional[Path]) -> Path:
         return Path(env_path)
     if _DEFAULT_CONFIG.exists():
         return _DEFAULT_CONFIG
+    if Path("network.yml.dist").exists():
+        template_hint = "  cp network.yml.dist network.yml    # start from the template"
+    else:
+        template_hint = (
+            "  cp network.yml.dist network.yml    # from your lankit checkout"
+        )
     raise ConfigError(
-        "network.yml not found.\n"
-        "Run lankit from your lankit directory, or set LANKIT_CONFIG."
+        "network.yml not found in the current directory.\n"
+        "\n"
+        "To get started:\n"
+        f"{template_hint}\n"
+        "  lankit discover --new              # or run the guided setup wizard\n"
+        "\n"
+        "Then run lankit from the directory containing network.yml,\n"
+        "or set LANKIT_CONFIG=/path/to/network.yml."
     )
 
 

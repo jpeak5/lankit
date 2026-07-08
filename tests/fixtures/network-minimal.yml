@@ -1,0 +1,81 @@
+# Minimal valid network.yml for the offline unit-test suite.
+# Three segments: wifi-on-both-bands, locked-down IoT, wired-only servers.
+# Kept deliberately small — tests mutate copies of this to produce invalid inputs.
+
+household_name: "Testhouse"
+internal_domain: internal
+
+segments:
+  trusted:
+    vlan_id: 10
+    comment: "Household laptops and phones"
+    subnet: 10.10.0.0/24
+    ssid: "{{ household_name }}"
+    wifi_bands: [2ghz, 5ghz]
+    ssid_hidden: false
+    bandwidth_up: null
+    bandwidth_down: null
+    dns: filtered
+    force_dns: false
+    internet: full
+    client_isolation: false
+
+  iot:
+    vlan_id: 30
+    comment: "Untrusted smart devices"
+    subnet: 10.30.0.0/24
+    ssid: "{{ household_name }} IoT"
+    wifi_bands: [2ghz]
+    ssid_hidden: false
+    bandwidth_up: 10M
+    bandwidth_down: 50M
+    dns: filtered
+    force_dns: true
+    internet: egress_only
+    client_isolation: true
+
+  servers:
+    vlan_id: 20
+    comment: "Wired infrastructure"
+    subnet: 10.20.0.0/24
+    ssid: null
+    wifi_bands: []
+    ssid_hidden: false
+    bandwidth_up: null
+    bandwidth_down: null
+    dns: none
+    force_dns: false
+    internet: full
+    client_isolation: false
+
+permissions:
+  trusted:
+    can_reach: [iot, servers]
+
+privacy:
+  query_logging: full
+  query_retention: 7d
+  dashboard_visibility: admin_only
+  apple_private_relay: allow
+
+wifi_password_source: prompt
+vpn: none
+dnssec: true
+
+hosts:
+  dns_server:
+    hostname: pihole
+    segment: servers
+    ip: 10.20.0.2
+    mac: "DC:A6:32:00:00:01"
+    services: [dns]
+
+router:
+  ip: 192.168.88.1
+  ssh_user: lankit
+  ssh_key: ~/.ssh/lankit_ed25519
+  wan_interface: ether1
+  lan_interface: ether2
+
+failsafe_seconds: 120
+ssh_key: ~/.ssh/lankit_ed25519

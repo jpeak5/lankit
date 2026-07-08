@@ -39,6 +39,14 @@ It's not for people who want zero complexity. A VLAN-segmented network with Pi-h
 
 It's not for network administrators managing production infrastructure. lankit is residential scale, intentionally. It doesn't support multiple routers, it doesn't support BGP or OSPF, it doesn't have an API, and it's not designed for high availability. If you need those things, you're past the problem lankit solves.
 
+### The installer and the rest of the household
+
+There's a distinction worth being precise about, because it drives a lot of design decisions. The person who *installs* lankit — who edits `network.yml`, runs `lankit apply`, and reads a stack trace when something goes sideways — is the technical one. There's usually exactly one of them per household. The installation bar is set for that person, and it's not lowered: setup assumes comfort at a terminal, and we don't pretend otherwise.
+
+But the household is not just the installer. It's the partner who needs the guest WiFi password, the kid whose tablet lives on its own segment, the housemate who wants to know why the printer can't see their laptop. These people are not a lesser audience — they're the reason the network exists. lankit serves them, deliberately and as first-class beneficiaries, but through what it *produces* rather than through the setup process. The rollback card taped inside the network cabinet, the password card, the plain-English `lankit explain` output, the self-service portals for registering a device or checking what's blocked — that's the surface the non-installer household touches. And when something breaks, the recovery paths (safe-mode revert, the printed rollback card, the portal) are built so that getting back to a working state doesn't require the installer to be home.
+
+So the honest framing is: one technical installer, a whole household of beneficiaries. We don't redesign the install experience around people who won't use it, and we don't treat the people who never open a terminal as an afterthought. Those are two different jobs, and lankit does both — just in two different places.
+
 ---
 
 ## Why it matters (the greater good)
@@ -76,3 +84,4 @@ These are the things lankit has to be. If any of them are removed or compromised
 ## Revision history
 
 - `2026-04-12`: Initial document created from DESIGN.md and codebase analysis.
+- `2026-07-06`: Added "The installer and the rest of the household" under *Who it's for*, recording the Gate 0.2 audience resolution from the v1-readiness review (`docs/v1-readiness-review.md` §1.2, Part 4 Gate 0.2). Resolves the standing tension between the mission's technical-installer framing and Dale-class installer personas: the installer is technical and the setup bar is not softened; non-installer household members are first-class beneficiaries served through lankit's outputs (cards, plain-English rules, portals) and its recovery paths, not through the installation UX. Closes ENH-009 / #17.

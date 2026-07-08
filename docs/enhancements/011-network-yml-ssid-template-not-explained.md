@@ -1,6 +1,6 @@
 # ENH-011: `{{ household_name }}` template syntax in network.yml has no explanation
 
-**Persona(s):** Morgan, Alex
+**Persona(s):** Dale, Priya
 **Surface:** network.yml
 **Priority:** Medium
 
@@ -19,7 +19,7 @@ There is no comment anywhere in `network.yml` explaining what `{{ household_name
 2. Delete it and type the name out manually (which works, but loses the connection to `household_name`)
 3. Break it accidentally (e.g., `{ household_name }-IoT` without the double braces) with no validation error
 
-Morgan in particular is likely to leave it as-is, not realizing her IoT network will broadcast as `{{ household_name }}-IoT` literally.
+Dale in particular is likely to leave it as-is, not realizing her IoT network will broadcast as `{{ household_name }}-IoT` literally.
 
 ## Proposed fix
 

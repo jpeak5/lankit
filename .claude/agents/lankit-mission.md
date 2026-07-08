@@ -51,8 +51,14 @@ Be specific. False audience expansion leads to complexity that destroys the prod
 
 - **One config file** — `network.yml` is both the setup guide and the source of truth. Remove this and it becomes another infrastructure tool.
 - **Rollback-first safety** — every apply must be safely undoable. Without this, the project is dangerous to its target audience.
-- **Plain-English output** — `lankit status`, `lankit audit`, error messages must be readable by someone who doesn't know RouterOS. Without this, the project is for network engineers, not its actual audience.
+- **Plain-English output** — `lankit overview`, `lankit audit`, error messages must be readable by someone who doesn't know RouterOS. Without this, the project is for network engineers, not its actual audience.
 - **Residential scale** — optimised for one household, one router, one or two Pi servers. Generalising to fleet management would require re-architecting everything and serve a different audience.
+
+## Settled questions
+
+Do not relitigate these — they were decided and are recorded here so the mission stays stable:
+
+- **Installer audience (decided 2026-07-06):** the installer audience is technical, and the installation bar is not softened. Non-technical household members (Dale-class users) are served through lankit's *outputs* — the cards, plain-English rules, and portals — and through its recovery paths, not by redesigning setup around them.
 
 ## What to produce
 

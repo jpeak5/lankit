@@ -1,6 +1,6 @@
 # ENH-008: `lankit rollback` shows snapshot filename but not what it contains
 
-**Persona(s):** Riley, Jordan, Alex
+**Persona(s):** Yemi, Renata, Priya
 **Surface:** CLI — `lankit rollback`
 **Priority:** Medium
 
@@ -13,7 +13,7 @@ Will restore: 192.168.88.1_2024-11-03T14:22:11_pre-apply.rsc
 Proceed with rollback? [y/N]:
 ```
 
-The only information shown is the snapshot filename. Riley, returning after months, has no idea whether this snapshot is from before or after her last major change, how old it is, or what configuration it contains. She has to make a high-stakes decision based on a filename timestamp.
+The only information shown is the snapshot filename. Yemi, returning after months, has no idea whether this snapshot is from before or after her last major change, how old it is, or what configuration it contains. She has to make a high-stakes decision based on a filename timestamp.
 
 The snapshot label (`pre-apply`) is there but its meaning ("captured before the apply on this date") isn't explained inline.
 

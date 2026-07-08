@@ -1,6 +1,6 @@
 # ENH-019: Failsafe timer is not visible while the "Keep changes?" prompt is active
 
-**Persona(s):** Alex, Morgan, Jordan
+**Persona(s):** Priya, Dale, Renata
 **Surface:** CLI — `lankit apply`
 **Priority:** Medium
 
@@ -15,7 +15,7 @@ Keep these changes? (router will retain them; 'no' rolls back to snapshot) [y/N]
 
 The timer starts when the failsafe is installed (before uploads), not when the prompt appears. By the time the user sees this prompt, some unknown portion of the 120 seconds has already elapsed — potentially most of it, if there were many scripts and the router was slow.
 
-A user who pauses to think, checks another window, or reads the message carefully may find the router has already auto-reverted before they answer "y." This is especially confusing for Morgan and Jordan who don't understand why their changes disappeared.
+A user who pauses to think, checks another window, or reads the message carefully may find the router has already auto-reverted before they answer "y." This is especially confusing for Dale and Renata who don't understand why their changes disappeared.
 
 There is also no indication in the prompt of how many seconds remain.
 

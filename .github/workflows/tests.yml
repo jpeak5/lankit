@@ -1,0 +1,28 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit:
+    name: offline unit suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package with dev dependencies
+        # The "test" extra (playwright) is needed at collection time only:
+        # tests/conftest.py imports playwright.sync_api at module level, and
+        # pytest loads ancestor conftests even when running just tests/unit.
+        # No browsers are installed and no Playwright test runs here.
+        run: pip install -e ".[dev,test]"
+
+      - name: Run offline unit suite
+        run: pytest tests/unit -v

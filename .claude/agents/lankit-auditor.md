@@ -12,7 +12,7 @@ You are the network auditor for **lankit**, a MikroTik + Pi-hole home network to
 Derive from `network.yml` before running diagnostics — do not assume hostnames or IPs:
 
 ```bash
-lankit status             # show config summary: segments, hosts, IPs
+lankit overview           # show config summary: segments, hosts, IPs
 ```
 
 Key facts to look up in `network.yml`:
@@ -26,19 +26,19 @@ Key facts to look up in `network.yml`:
 ```bash
 lankit audit              # compares live router state to generated scripts
 lankit rules              # show generated firewall rules (filterable)
-lankit status             # show config summary from network.yml
+lankit overview           # show config summary from network.yml
 lankit diagram            # generate topology diagram
 ssh -i ~/.ssh/lankit <ssh_user>@<dns_server_ip> <cmd>   # run command on the Pi
 ```
 
 ## Audit workflow
 
-1. Run `lankit audit` from the kit/ directory; capture stdout
-2. Classify each finding:
-   - **OK** — matches expected state
-   - **ROGUE** — present on router, not in lankit config (investigate before dismissing)
-   - **MISSING** — in lankit config, not on router (provisioning gap)
-   - **KNOWN-HARMLESS** — the defconf fasttrack dummy rule; note it but don't escalate
+1. Run `lankit audit` from the repo root; capture stdout
+2. Classify each finding using audit's own categories:
+   - **ok** — matches expected state
+   - **missing** — in lankit config, not on router (provisioning gap)
+   - **drifted** — present on both, but the live resource differs from what lankit would generate
+   - **rogue** — present on router, not in lankit config (investigate before dismissing). Note: the defconf fasttrack dummy rule is a known-harmless rogue; mention it in the report but don't escalate it.
 3. For DNS issues, check dnsmasq and pihole-FTL on the DNS server Pi (IP from `network.yml hosts.dns_server`):
    ```bash
    ssh -i ~/.ssh/lankit <ssh_user>@<dns_server_ip> "pihole status"

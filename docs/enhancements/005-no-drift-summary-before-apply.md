@@ -1,6 +1,6 @@
 # ENH-005: `lankit apply` doesn't show what will change before applying
 
-**Persona(s):** Sam, Riley, Jordan
+**Persona(s):** Tariq, Yemi, Renata
 **Surface:** CLI — `lankit apply`
 **Priority:** High
 
@@ -15,7 +15,7 @@ Dry run: would apply 7 script(s) (all segments) to 192.168.88.1:
   ...
 ```
 
-It does not show what RouterOS commands are in those scripts, and it does not compare against the live router to show what is new, changed, or removed. Sam and Riley want to know "what exactly will change" before committing. Jordan needs to show a non-technical auditor "here's what changed" after the fact.
+It does not show what RouterOS commands are in those scripts, and it does not compare against the live router to show what is new, changed, or removed. Tariq and Yemi want to know "what exactly will change" before committing. Renata needs to show a non-technical auditor "here's what changed" after the fact.
 
 The `lankit audit` command detects drift but is a separate step and requires reading through a full table. There is no pre-apply diff.
 

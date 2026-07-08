@@ -1,6 +1,6 @@
 # ENH-016: Rollback card does not include WiFi passwords or reconnect steps
 
-**Persona(s):** Jordan, Morgan, Riley
+**Persona(s):** Renata, Dale, Yemi
 **Surface:** CLI — `lankit rollback-card`
 **Priority:** Medium
 
@@ -12,9 +12,9 @@ The emergency rollback card covers router recovery steps, credentials, segment g
 2. Instructions for how to reconnect a laptop to the management network after a factory reset
 3. The Pi-hole admin URL and how to verify it's running
 
-For Jordan's small office scenario: after a factory reset and re-apply, someone needs to reconnect all client devices. The rollback card is the "keep near the router" artifact, but it doesn't contain the WiFi names — that's on the password card. Two printed cards are required, and the rollback card doesn't reference the password card.
+For Renata's small office scenario: after a factory reset and re-apply, someone needs to reconnect all client devices. The rollback card is the "keep near the router" artifact, but it doesn't contain the WiFi names — that's on the password card. Two printed cards are required, and the rollback card doesn't reference the password card.
 
-For Morgan: after a recovery, she needs to know her Pi-hole is at `http://10.40.0.2/admin` — this isn't on the card.
+For Dale: after a recovery, she needs to know her Pi-hole is at `http://10.40.0.2/admin` — this isn't on the card.
 
 ## Proposed fix
 

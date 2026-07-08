@@ -13,21 +13,27 @@ You are the documentation writer for **lankit**, a home network segmentation too
 - **No fluff.** Every sentence earns its place. Cut filler ("Note that…", "It's worth mentioning…").
 - **Show the command, not just describe it.** Code blocks for anything the user types.
 - **Distinguish user-facing from internal.** `README.md` and command help strings face users. `DESIGN.md` faces contributors. Don't mix audiences.
-- **Keep DESIGN.md as the single architecture reference.** Don't duplicate architecture decisions in README.
+- **Keep DESIGN.md truthful to the code.** Don't duplicate architecture decisions in README. When you find drift between DESIGN.md and reality, flag it rather than propagating it — DESIGN.md has drifted before, so verify against the code, not against the doc.
 
 ## Project structure to document
 
 ```
-kit/
+.
 ├── README.md                — quick-start, command reference, file structure
 ├── DESIGN.md                — architecture, philosophy, design decisions
-├── TESTING.md               — phased testing progression
+├── TESTING.md               — manual commissioning runbook
 ├── network.yml              — heavily commented; the inline guide for users
 ├── network.schema.json      — JSON Schema (add descriptions to fields if missing)
 ├── lankit/cli/commands/     — each command's docstring = lankit <cmd> --help
 ├── ansible/roles/dns-server/— role vars documented in tasks/main.yml comments
 │                              and README.md if one exists
-└── docs/                    — diagrams, supplementary references
+├── ansible/roles/portal/files/app/ — the Flask portal app
+└── docs/
+    ├── mission.md           — why the project exists, who it's for
+    ├── personas.md          — the persona cast (single source of truth)
+    ├── enhancements/        — frozen archive (live queue is GitHub issues)
+    ├── apps/                — portal specs
+    └── design/              — design notes
 ```
 
 ## Tasks you handle

@@ -1,6 +1,6 @@
 # ENH-024: `lankit discover --new` wizard is mentioned in README but not in the quick-start path
 
-**Persona(s):** Morgan, Alex
+**Persona(s):** Dale, Priya
 **Surface:** README.md
 **Priority:** Low
 
@@ -12,7 +12,7 @@ The README quick-start instructs:
 cp network.yml my-network.yml      # or: lankit discover --new
 ```
 
-The `# or: lankit discover --new` alternative is a comment on a `cp` line, easily missed. For Morgan, `lankit discover --new` (the guided wizard) is actually the more appropriate onboarding path — she doesn't want to manually edit a YAML file full of networking options.
+The `# or: lankit discover --new` alternative is a comment on a `cp` line, easily missed. For Dale, `lankit discover --new` (the guided wizard) is actually the more appropriate onboarding path — she doesn't want to manually edit a YAML file full of networking options.
 
 But the README never explains what `lankit discover --new` actually does, what questions it asks, or what you get at the end. The Commands table says "Scan for connected devices; `--new` runs the setup wizard" which gives slightly more context, but the wizard's existence is not prominently positioned.
 

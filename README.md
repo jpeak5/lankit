@@ -10,10 +10,16 @@ lankit is a configuration toolkit for the MikroTik hAP ax³ that generates Route
 - **DNS** — Pi-hole (ad blocking, query logging) backed by Unbound (full
   recursive resolution, DNSSEC). Adding a new VLAN requires no DNS
   reconfiguration.
-- **Portals** — optional web interfaces served by Caddy on a second Pi
-  (`app_server`): `me.internal` (device self-service), `apps.internal`
-  (landing page), `register.internal` (MAC registration). Currently
-  placeholder pages; dynamic features tracked in the issue queue.
+- **Portals** — beta, optional, off by default (`hosts.app_server.enabled:
+  true` to turn on). A Flask app served by Caddy on a second Pi, split
+  across four addresses: `me.internal` for device self-service (your IP,
+  segment, and DNS stats; rename your device; pause ad blocking for
+  yourself on a timer that reverts automatically), `network.internal` for a
+  household-wide device/segment overview and speedtest history,
+  `register.internal` for devices with randomized MAC addresses to request
+  access, and `apps.internal` as the landing page. It works today but is
+  younger and less tested than the router side — interfaces may change.
+  Report problems as GitHub issues.
 - **Safety** — every `lankit apply` snapshots the router config first;
   `lankit rollback` restores it. If you push a bad config and lose WiFi,
   you can't reach the router from your laptop — the printable rollback card
@@ -37,6 +43,7 @@ Ansible is installed automatically as part of `pip install -e .`.
 ```bash
 git clone https://github.com/jpeak5/lankit.git
 cd lankit
+python3 --version                  # must be 3.11+
 pip install -e .
 
 # Verify:
@@ -69,12 +76,15 @@ Then:
 ```bash
 lankit overview                    # verify config parsed correctly
 lankit generate                    # render RouterOS scripts
+cat ansible/generated/*.rsc        # read exactly what will run on the router
 lankit diagram --view              # visual sanity check
 lankit rollback-card               # print and keep near router
 lankit apply --dry-run             # confirm SSH works
 lankit apply                       # push to router
 lankit provision                   # set up Pi-hole + Unbound
 ```
+
+`lankit rules` renders the same scripts as plain-English, filterable-by-segment text.
 
 ## Commands
 

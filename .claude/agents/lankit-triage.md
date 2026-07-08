@@ -83,6 +83,5 @@ If `--focus <domain>` was passed, filter all sections to that domain and adjust 
 ## Notes
 
 - `ux-test` label issues are Playwright test gaps — they require the portals to be live and generally have `playwright` + `medium` effort
-- Failsafe bugs (#6–#11) cluster together and share risk profile — note when fixing one likely fixes neighbors
-- Agent issues (#38, #39) are meta — they produce tooling, not features
+- Do not pin or memorize issue numbers — derive clusters and meta-issues from the live `gh issue list` output on each run. For example: failsafe-related issues tend to cluster and share a risk profile — check for shared risk profiles and note when fixing one likely fixes neighbors; issues about agents or tooling are meta — they produce tooling, not features. Identify these groupings fresh each time from titles and bodies.
 - Do not invent dependencies that aren't there. If blocking status is unclear, say so.

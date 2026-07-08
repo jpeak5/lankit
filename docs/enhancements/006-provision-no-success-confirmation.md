@@ -1,12 +1,12 @@
 # ENH-006: `lankit provision` gives no confirmation that Pi-hole and Unbound are actually working
 
-**Persona(s):** Morgan, Alex, Jordan
+**Persona(s):** Dale, Priya, Renata
 **Surface:** CLI — `lankit provision`
 **Priority:** High
 
 ## Problem
 
-`lankit provision` runs the Ansible playbook and exits with the Ansible summary. For a user who isn't fluent in Ansible output, it's unclear whether Pi-hole is actually serving DNS, whether Unbound is recursing, and whether ad blocking is active. Morgan's primary goal is ad blocking — she has no way to verify it's working without searching for "how to test Pi-hole."
+`lankit provision` runs the Ansible playbook and exits with the Ansible summary. For a user who isn't fluent in Ansible output, it's unclear whether Pi-hole is actually serving DNS, whether Unbound is recursing, and whether ad blocking is active. Dale's primary goal is ad blocking — she has no way to verify it's working without searching for "how to test Pi-hole."
 
 The provision command has a `--check` (dry-run) flag but no post-provision verification step.
 

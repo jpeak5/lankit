@@ -94,6 +94,11 @@ segments:
     vlan_id: 25
     comment: "Corporate managed endpoints — isolated from home devices"
     subnet: "10.25.0.0/24"
+
+    # {{ household_name }} is a placeholder — lankit replaces it with the
+    # household_name value at the top of this file when generating config.
+    # Example: household_name "Maple" → this SSID becomes "Maple-Work".
+    # You can use it in any SSID string, or type a plain name directly.
     ssid: "{{ household_name }}-Work"
     wifi_bands: [5ghz]
     ssid_hidden: false
@@ -213,6 +218,15 @@ permissions:
   servers:
     can_reach: [iot]    # e.g. Home Assistant controlling smart devices
 
+  # When you add a new segment, unlock its doors here too.
+  # Example: to let trusted devices reach a new "cameras" segment,
+  # add it to trusted's can_reach list:
+  #
+  #   trusted:
+  #     can_reach: [servers, media, iot, work, admin, cameras]
+  #
+  # (lankit extend asks this for you and updates this block.)
+
   # Segments with no entry here cannot initiate to anywhere.
 
 
@@ -297,8 +311,12 @@ wifi_password_source: vault
 #
 #   "none"      → No remote access.
 #
+# Not yet implemented: lankit doesn't provision VPN config for either
+# option yet (tracked in GitHub issue #12). Choose "none" for now — the
+# field is reserved so your intent is on record for when it lands.
+#
 # CHOOSE:
-vpn: "CHOOSE"   # wireguard | ipsec | none
+vpn: "CHOOSE"   # wireguard | ipsec | none — not yet implemented, choose none
 
 # DNSSEC: validates that DNS answers haven't been tampered with in
 # transit. Unbound checks cryptographic signatures on DNS records.

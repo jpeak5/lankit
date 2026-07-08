@@ -1,0 +1,60 @@
+# Valid network.yml without a Pi-hole host — exercises the dns_ip fallback
+# (public DNS handed out via DHCP; force_dns redirect is skipped entirely).
+
+household_name: "Nopihole"
+internal_domain: internal
+
+segments:
+  trusted:
+    vlan_id: 10
+    comment: "Household devices"
+    subnet: 10.10.0.0/24
+    ssid: "{{ household_name }}"
+    wifi_bands: [2ghz, 5ghz]
+    ssid_hidden: false
+    bandwidth_up: null
+    bandwidth_down: null
+    dns: unfiltered
+    force_dns: false
+    internet: full
+    client_isolation: false
+
+  iot:
+    vlan_id: 30
+    comment: "Smart devices"
+    subnet: 10.30.0.0/24
+    ssid: "{{ household_name }} IoT"
+    wifi_bands: [2ghz]
+    ssid_hidden: false
+    bandwidth_up: null
+    bandwidth_down: null
+    dns: unfiltered
+    force_dns: true
+    internet: egress_only
+    client_isolation: true
+
+permissions: {}
+
+privacy:
+  query_logging: none
+  query_retention: 24h
+  dashboard_visibility: admin_only
+  apple_private_relay: allow
+
+wifi_password_source: prompt
+vpn: none
+dnssec: false
+
+dns_ip: "1.1.1.1"
+
+hosts: {}
+
+router:
+  ip: 192.168.88.1
+  ssh_user: lankit
+  ssh_key: ~/.ssh/lankit_ed25519
+  wan_interface: ether1
+  lan_interface: ether2
+
+failsafe_seconds: 120
+ssh_key: ~/.ssh/lankit_ed25519

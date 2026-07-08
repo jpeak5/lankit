@@ -1,6 +1,6 @@
 # ENH-010: `lankit audit` flags rogue entries with no actionable remediation path
 
-**Persona(s):** Sam, Riley, Jordan
+**Persona(s):** Tariq, Yemi, Renata
 **Surface:** CLI — `lankit audit`
 **Priority:** Medium
 
@@ -14,7 +14,7 @@ When `lankit audit` finds rogue entries (router resources without a `kit:` tag),
 Rogue entries were not created by lankit. Review manually via WinBox or SSH.
 ```
 
-"Review manually via WinBox or SSH" is the only guidance. For Riley returning after a firmware update, for Jordan who doesn't have WinBox installed, and for Sam who wants to clean up efficiently from the CLI, this is a dead end. There is no `lankit audit --fix-rogues` or even the RouterOS command to run.
+"Review manually via WinBox or SSH" is the only guidance. For Yemi returning after a firmware update, for Renata who doesn't have WinBox installed, and for Tariq who wants to clean up efficiently from the CLI, this is a dead end. There is no `lankit audit --fix-rogues` or even the RouterOS command to run.
 
 The audit correctly identifies the resource type and name — enough information to generate the removal command — but doesn't surface it.
 

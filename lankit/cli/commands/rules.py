@@ -30,6 +30,15 @@ def rules(config_path, segment, unit):
 
     console = Console()
 
+    # Pre-flight: this command reads generated scripts, so check for them
+    # before printing anything else
+    generated_dir = Path("ansible/generated")
+    rsc_files = sorted(generated_dir.glob("*.rsc")) if generated_dir.exists() else []
+    if not rsc_files:
+        console.print(f"[yellow]No generated scripts found in {generated_dir}/.[/yellow]")
+        console.print("Run [bold]lankit generate[/bold] first to render them from network.yml.")
+        raise SystemExit(1)
+
     # Show provenance: config → generated scripts → not yet applied
     try:
         from lankit.core.config import load, ConfigError as CE
@@ -43,19 +52,6 @@ def rules(config_path, segment, unit):
         pass
 
     console.print("[dim]These rules exist in ansible/generated/ — run [bold]lankit apply[/bold] to push them to the router.[/dim]\n")
-
-    # Find generated scripts
-    generated_dir = Path("ansible/generated")
-    if not generated_dir.exists():
-        console.print("[yellow]No generated scripts found.[/yellow]")
-        console.print("Run [bold]lankit generate[/bold] first.")
-        raise SystemExit(1)
-
-    rsc_files = sorted(generated_dir.glob("*.rsc"))
-    if not rsc_files:
-        console.print("[yellow]No .rsc files in ansible/generated/[/yellow]")
-        console.print("Run [bold]lankit generate[/bold] first.")
-        raise SystemExit(1)
 
     # Parse rules with lankit comments
     # Comment convention: lankit:<unit>:<scope>:<resource>

@@ -1,16 +1,16 @@
 # ENH-021: No documented way to inspect generated .rsc scripts before applying
 
-**Persona(s):** Sam
+**Persona(s):** Tariq
 **Surface:** README.md, CLI — `lankit generate`
 **Priority:** Low
 
 ## Problem
 
-Sam, coming from pfSense, wants to understand exactly what RouterOS commands lankit is going to run before trusting the tool. The generated `.rsc` files are the correct place to look — they live in `ansible/generated/` after `lankit generate` runs — but this is never mentioned in README.md or in any command help text.
+Tariq, coming from pfSense, wants to understand exactly what RouterOS commands lankit is going to run before trusting the tool. The generated `.rsc` files are the correct place to look — they live in `ansible/generated/` after `lankit generate` runs — but this is never mentioned in README.md or in any command help text.
 
 The README quick-start goes directly from "edit network.yml" to "lankit apply" with only `lankit diagram --view` as a visual sanity check. There is no step that says "inspect the generated RouterOS scripts in `ansible/generated/`."
 
-Sam will find the files by reading the file structure in README.md, but only because he reads documentation thoroughly. The casual user (Alex) will never know the escape hatch exists.
+Tariq will find the files by reading the file structure in README.md, but only because he reads documentation thoroughly. The casual user (Priya) will never know the escape hatch exists.
 
 ## Proposed fix
 

@@ -1,12 +1,12 @@
 # ENH-014: No single command shows "current live state" for a returning user
 
-**Persona(s):** Riley, Jordan
+**Persona(s):** Yemi, Renata
 **Surface:** CLI — missing command / `lankit overview`
 **Priority:** Medium
 
 ## Problem
 
-Riley returns after 6 months. She doesn't remember if the last apply succeeded, whether any segments were added, or whether anything drifted. She wants one command that answers: "what is the network doing right now?"
+Yemi returns after 6 months. She doesn't remember if the last apply succeeded, whether any segments were added, or whether anything drifted. She wants one command that answers: "what is the network doing right now?"
 
 The available commands are:
 - `lankit overview` — reads network.yml only (desired state, no live data)
@@ -40,7 +40,7 @@ If anything is wrong, list only the failures:
   ✗ DNS       Pi-hole unreachable at 10.40.0.2
 ```
 
-This becomes the "check in" command Riley runs first when she comes back to the system.
+This becomes the "check in" command Yemi runs first when she comes back to the system.
 
 ## Acceptance criteria
 

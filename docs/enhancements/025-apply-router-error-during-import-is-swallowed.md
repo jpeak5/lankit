@@ -1,6 +1,6 @@
 # ENH-025: RouterOS import errors during `lankit apply` are printed as warnings and not fail-stopped
 
-**Persona(s):** Sam, Alex, Jordan
+**Persona(s):** Tariq, Priya, Renata
 **Surface:** CLI — `lankit apply`
 **Priority:** High
 
@@ -22,7 +22,7 @@ input does not match any value of interface
 
 These are printed as warnings and the apply continues. The user sees a yellow warning in the middle of scrolling output, says "Keep changes?", and the router is now in a partially-applied state.
 
-For Jordan and Alex, the result is a silent partial failure: some rules applied, some didn't, no clear summary of what succeeded. The apply returned "success" (green ✓), but the network may be misconfigured.
+For Renata and Priya, the result is a silent partial failure: some rules applied, some didn't, no clear summary of what succeeded. The apply returned "success" (green ✓), but the network may be misconfigured.
 
 The check `if err and "warning" not in err.lower()` attempts to filter RouterOS warnings from errors, but this heuristic is fragile — RouterOS sometimes puts actual errors on stderr with "warning" in the text.
 
