@@ -404,8 +404,14 @@ router:
 
 
 # ─── Safety ───────────────────────────────────────────────────────────────────
-# lankit provision and lankit restore apply changes in RouterOS safe mode.
-# If you don't run lankit commit within this window, the router reverts.
+# lankit apply protects every push with a countdown scheduler on the
+# router — not RouterOS "safe mode" (the CTRL+X/F4 session mechanism);
+# this is a normal /system scheduler job that survives even if your SSH
+# session drops. If it fires, it removes everything lankit added and
+# rebuilds the last known-good state (a converge, not a session rewind).
+# Answering "yes" at the apply confirmation prompt is what disarms it —
+# lankit commit is a separate command (it only saves a named snapshot;
+# it does not touch the failsafe).
 # Longer = more time to verify. Shorter = faster recovery if something
 # goes wrong and you can't reach the router.
 failsafe_seconds: 300

@@ -79,6 +79,30 @@ def test_global_mode_removes_broadly_and_includes_globals(cfg, tmp_path):
     assert 'find where comment~"^lankit:vlan:"]' in out["01-vlans.rsc"]
 
 
+# ─── Scripted defconf-fasttrack disable (G3.7) ───────────────────────────────
+
+def test_global_mode_scripts_defconf_fasttrack_disable(cfg, tmp_path):
+    fw = render(cfg, tmp_path)["03-firewall.rsc"]
+    # Find-guarded, no-op-safe disable of the defconf blanket rule
+    assert 'disable [find where comment="defconf: fasttrack" && disabled=no]' in fw
+    # The disable must precede the scoped replacement rule
+    assert fw.index('comment="defconf: fasttrack"') < fw.index("action=fasttrack-connection")
+    # The manual step is gone (S6)
+    assert "MANUAL STEP" not in fw
+    # Binding constraint (tag-scoped-revert.md §5.3/§11): the defconf rule
+    # is never tagged lankit: — the disable line must not touch its comment.
+    disable_line = next(
+        line for line in fw.splitlines() if line.startswith("disable [find")
+    )
+    assert "lankit:" not in disable_line
+    assert "comment=" not in disable_line.replace('where comment="defconf: fasttrack"', "")
+
+
+def test_segment_filter_omits_defconf_fasttrack_disable(cfg, tmp_path):
+    fw = render(cfg, tmp_path, segment_filter="iot")["03-firewall.rsc"]
+    assert 'comment="defconf: fasttrack"' not in fw
+
+
 # ─── Remove-pass scoping: segment_filter mode ────────────────────────────────
 
 def test_segment_filter_scopes_removes_and_drops_globals(cfg, tmp_path):
@@ -188,3 +212,52 @@ def test_generate_one_appends_j2_suffix(cfg, tmp_path):
     path = generate_one(cfg, "03-firewall.rsc", output_dir=tmp_path)
     assert path.name == "03-firewall.rsc"
     assert 'comment="lankit:fw:iot:isolation"' in path.read_text()
+
+
+# ─── Multi-segment segment_filter (G1.2 — known-good archive re-render) ─────
+
+def test_multi_segment_filter_requires_explicit_include_globals(cfg, tmp_path):
+    with pytest.raises(ValueError, match="include_globals"):
+        generate_all(cfg, output_dir=tmp_path, segment_filter=["trusted", "iot"])
+
+
+def test_multi_segment_filter_with_globals_true(cfg, tmp_path):
+    out = render(cfg, tmp_path, segment_filter={"trusted", "iot"}, include_globals=True)
+    fw = out["03-firewall.rsc"]
+    assert "net-trusted" in fw
+    assert "net-iot" in fw
+    # Cross-segment permits are NOT restricted to the filtered subset —
+    # trusted's can_reach still names servers even though servers isn't
+    # part of this render (matches the existing --segment X behavior:
+    # forward references to not-yet-applied segments are intentional, see
+    # generator._build_context's comment). A caller needing a fully
+    # self-contained render must pre-filter permissions itself.
+    assert 'dst-address-list=net-servers' in fw
+    assert "add list=net-servers" not in fw  # but its own address-list isn't (re)created here
+    # include_globals=True even though only a subset of segments is present
+    assert 'comment="lankit:fw:all:default-deny"' in fw
+    assert "vlan-filtering=yes" in out["01-vlans.rsc"]
+
+
+def test_multi_segment_filter_with_globals_false(cfg, tmp_path):
+    out = render(cfg, tmp_path, segment_filter=["iot", "servers"], include_globals=False)
+    fw = out["03-firewall.rsc"]
+    assert "net-iot" in fw
+    assert "net-servers" in fw
+    assert "net-trusted" not in fw
+    assert "lankit:fw:all:default-deny" not in fw
+    assert "vlan-filtering=yes" not in out["01-vlans.rsc"]
+
+
+def test_single_string_segment_filter_still_defaults_include_globals_false(cfg, tmp_path):
+    # Unchanged behavior for the existing single-segment call sites (apply.py
+    # --segment NAME) — passing a bare str still needs no include_globals arg.
+    out = render(cfg, tmp_path, segment_filter="iot")
+    assert "vlan-filtering=yes" not in out["01-vlans.rsc"]
+
+
+def test_render_texts_matches_generate_all_output(cfg):
+    from lankit.core.generator import render_texts
+    texts = render_texts(cfg)
+    assert set(texts) == set(EXPECTED_FILES)
+    assert 'comment="lankit:vlan:trusted:interface"' in texts["01-vlans.rsc"]

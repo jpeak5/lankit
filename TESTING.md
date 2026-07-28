@@ -51,8 +51,29 @@ If anything looks wrong: `lankit rollback`
 
 ```bash
 lankit apply                         # full stack, prompts to keep or revert
-lankit test-failsafe                 # verify auto-revert works before relying on it
+lankit test-failsafe                 # rehearse the failsafe scheduler before relying on it
 ```
+
+`lankit apply` protects the push with a tag-scoped revert bundle
+(`lankit-revert.rsc`, `docs/design/tag-scoped-revert.md`), uploaded and
+verified on the router *before* any script is imported. If you decline at
+the keep prompt, the import errors out, or the failsafe countdown fires
+because the session dropped, that bundle removes everything lankit owns
+and rebuilds the last known-good state — a converge, not a raw snapshot
+replay. `lankit rollback` and `lankit restore` use the same bundle.
+
+`lankit test-failsafe` rehearses the scheduler mechanics, not the real
+revert bundle: it installs the actual `lankit-failsafe` scheduler and
+walks it through five phases (pre-flight cleanup, install scheduler +
+sentinel rule, verify the sentinel is present, reschedule the timer in
+place and verify the start-time moved, then wait for it to fire and
+confirm the sentinel was removed). The on-event shape (self-delete →
+import → log markers) matches production, but today the "import" is a
+one-line removal of the disabled sentinel rule, not `lankit-revert.rsc` —
+so this drill certifies the timer/scheduler primitive, not a full
+remove-and-rebuild. A `--full` mode that drills the actual revert bundle
+end-to-end is designed but not yet implemented (execution plan G1.9); use
+the lab router, not a live household network, once it lands.
 
 ---
 

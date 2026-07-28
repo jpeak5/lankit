@@ -22,6 +22,7 @@ def commit(config_path, message):
     from lankit.core.config import load, ConfigError
     from lankit.core.router import RouterConnection, RouterError
     from lankit.core import snapshots
+    from lankit.cli.commands._revert_shared import current_archive_id
     from pathlib import Path
     from rich.console import Console
 
@@ -39,7 +40,12 @@ def commit(config_path, message):
     try:
         with RouterConnection(cfg.router.ip, cfg.router.ssh_user, cfg.ssh_key) as conn:
             config_export = conn.export_config()
-            snap_path = snapshots.save(cfg.router.ip, config_export, label=label)
+            # Pair the snapshot with the currently-live known-good archive
+            # (design §8): a commit checkpoints the state that archive
+            # describes, and the pairing keeps the archive retained for as
+            # long as this snapshot survives in the index.
+            snap_path = snapshots.save(cfg.router.ip, config_export, label=label,
+                                       archive_id=current_archive_id(cfg.router.ip))
             all_snaps = snapshots.list_snapshots(cfg.router.ip)
             console.print(f"[green]✓[/green] Snapshot saved: [bold]{snap_path.name}[/bold]")
             console.print(f"  [dim]Total snapshots: {len(all_snaps)}[/dim]")

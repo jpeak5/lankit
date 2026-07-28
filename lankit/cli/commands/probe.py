@@ -2,7 +2,6 @@ import re
 import click
 from lankit.cli.__main__ import cli
 
-_COMMENT_RE = re.compile(r'comment="(lankit:[^"]+)"')
 _RECEIVED_RE = re.compile(r'received=(\d+)')
 
 
@@ -78,8 +77,10 @@ def probe(config_path, segment, audit_only):
             console.print("[bold]Phase 1 — Configuration audit[/bold]")
             console.print("[dim]  Comparing expected lankit: rules against live router config.[/dim]\n")
 
-            expected = _build_expected_tags(cfg)
-            live = _read_live_tags(conn)
+            from lankit.core import revert
+
+            expected = revert.expected_tags_for_config(cfg)
+            live = conn.read_lankit_tags()
 
             expected_set = set(expected)
             missing = sorted(expected_set - live)
@@ -204,95 +205,21 @@ def probe(config_path, segment, audit_only):
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _build_expected_tags(cfg) -> list[str]:
-    """Complete list of lankit: tags lankit would generate for this config."""
-    tags = []
-
-    dns = cfg.hosts.get("dns_server")
-    dns_segment = dns.segment if dns else None
-
-    for name, seg in cfg.segments.items():
-        # VLAN
-        tags += [f"lankit:vlan:{name}:interface", f"lankit:vlan:{name}:bridge"]
-        # DHCP
-        tags += [
-            f"lankit:dhcp:{name}:address",
-            f"lankit:dhcp:{name}:pool",
-            f"lankit:dhcp:{name}:server",
-            f"lankit:dhcp:{name}:network",
-        ]
-        # Firewall: LAN member + address list
-        tags += [f"lankit:fw:{name}:lan-member", f"lankit:fw:{name}:address-list"]
-        # Firewall: client isolation
-        if seg.client_isolation:
-            tags.append(f"lankit:fw:{name}:isolation")
-        # Firewall: DNS permits
-        if seg.dns != "none":
-            tags += [f"lankit:fw:{name}>dns:permit-udp", f"lankit:fw:{name}>dns:permit-tcp"]
-        # Firewall: internet egress
-        if seg.internet in ["full", "egress_only"]:
-            tags.append(f"lankit:fw:{name}:egress")
-        # WiFi
-        if seg.has_wifi:
-            tags.append(f"lankit:wifi:{name}:security")
-            if "5ghz" in seg.wifi_bands:
-                tags += [f"lankit:wifi:{name}:ap-5g", f"lankit:wifi:{name}:bridge-5g"]
-            if "2ghz" in seg.wifi_bands:
-                tags += [f"lankit:wifi:{name}:ap-2g", f"lankit:wifi:{name}:bridge-2g"]
-
-    # Inter-segment permits
-    for src, perm in cfg.permissions.items():
-        for dst in perm.can_reach:
-            tags.append(f"lankit:fw:{src}>{dst}:permit")
-
-    # Global
-    tags += [
-        "lankit:fw:all:local-rfc1918",
-        "lankit:fw:all:local-flat",
-        "lankit:fw:all:mark-internet",
-        "lankit:fw:all:default-deny",
-        "lankit:fw:all:fasttrack-internet",
-        "lankit:nat:all:masquerade",
-        "lankit:vlan:legacy:flat",
-        "lankit:dhcp:dns-server:lease",
-    ]
-
-    return tags
-
-
-def _read_live_tags(conn) -> set[str]:
-    """Read all lankit: tagged comments from the live router."""
-    commands = [
-        "/interface vlan print detail without-paging",
-        "/interface bridge vlan print detail without-paging",
-        "/interface bridge port print detail without-paging",
-        "/interface list member print detail without-paging",
-        "/ip address print detail without-paging",
-        "/ip pool print detail without-paging",
-        "/ip dhcp-server print detail without-paging",
-        "/ip dhcp-server network print detail without-paging",
-        "/ip dhcp-server lease print detail without-paging",
-        "/ip firewall address-list print detail without-paging",
-        "/ip firewall filter print detail without-paging",
-        "/ip firewall mangle print detail without-paging",
-        "/ip firewall nat print detail without-paging",
-    ]
-    wifi_commands = [
-        "/interface wifi security print detail without-paging",
-        "/interface wifi print detail without-paging",
-    ]
-
-    found: set[str] = set()
-    for cmd in commands:
-        out, _ = conn.run_tolerant(cmd)
-        found.update(_COMMENT_RE.findall(out))
-    for cmd in wifi_commands:
-        out, err = conn.run_tolerant(cmd)
-        if not err:
-            found.update(_COMMENT_RE.findall(out))
-
-    return found
+#
+# Expected-tag computation and live-tag reading both moved onto the shared
+# lankit.core.revert registry (TAG_TABLES, read_live_tags,
+# expected_tags_for_config) as part of G1.2 — see docs/design/tag-scoped-
+# revert.md's sign-off amendments. This closes two real gaps the old
+# hand-maintained lists here had drifted into: they were missing
+# /ip dns static, /queue tree, and every lankit:dns:*/lankit:bw:* tag, and
+# the parser assumed comments appear inline as comment="..." — RouterOS 7's
+# `print detail` actually renders them as a separate ';;; text' line (see
+# audit.py's _split_records, which this now reuses via revert.py).
+#
+# G1.3 promoted the read-live-tags loop itself to RouterConnection.
+# read_lankit_tags() (router.py) since apply.py's revert-verification path
+# needs the identical logic — probe just calls the shared method now
+# instead of keeping its own copy.
 
 
 def _per_segment_counts(name, seg, cfg, expected_set, live):
@@ -316,10 +243,25 @@ def _per_segment_counts(name, seg, cfg, expected_set, live):
     }
 
 
+_GLOBAL_LITERAL_TAGS = {
+    "lankit:vlan:legacy:flat",
+    "lankit:dhcp:dns-server:lease",
+    "lankit:dhcp:app-server:lease",
+    "lankit:dns:dns-server:hostname",
+    "lankit:dns:pihole:hostname",
+    "lankit:dns:app-server:hostname",
+    "lankit:dns:portal-me:hostname",
+    "lankit:dns:portal-network:hostname",
+    "lankit:dns:portal-register:hostname",
+}
+
+
 def _global_counts(expected_set, live):
-    global_tags = [t for t in expected_set if ":all:" in t or t in {
-        "lankit:vlan:legacy:flat", "lankit:dhcp:dns-server:lease",
-    }]
+    # Now that expected_set comes from a full render (revert.expected_tags_for_config),
+    # it correctly includes tags this literal set previously omitted entirely
+    # (e.g. app-server's lease/hostname, portal hostnames) — those used to be
+    # missing from _build_expected_tags altogether, not merely uncounted here.
+    global_tags = [t for t in expected_set if ":all:" in t or t in _GLOBAL_LITERAL_TAGS]
     found = sum(1 for t in global_tags if t in live)
     return found, len(global_tags)
 

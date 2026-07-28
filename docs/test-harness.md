@@ -97,6 +97,12 @@ The older router model is valuable specifically because it may have RouterOS qui
 hAP ax³ doesn't. Differences in `/export` output format or clock output will surface
 portability bugs (e.g. the clock-parsing failsafe gap) before users encounter them.
 
+**Bringing up the lab router itself.** See `docs/lab-router-bootstrap.md` for the
+hardware-level runbook — factory reset (via CLI, not the reset button), SSH key setup,
+and several RouterOS-version-specific quirks (unsupported key types, dynamic DHCP
+config, legacy signature algorithms) encountered getting a retired production hAP ac
+into lab-ready state.
+
 ## Configuration isolation
 
 The lab gets its own config file, never shared with production:

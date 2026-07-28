@@ -45,35 +45,60 @@ def rollback_card(config_path, output):
         "",
         "SITUATION: Router config is broken and the network is down.",
         "",
-        "OPTION 1 — FACTORY RESET (fastest, loses all config)",
+        "OPTION 1 — FACTORY RESET (last resort, loses all config)",
         "-" * 72,
         "  1. Locate the reset button on the router.",
         "  2. With router powered on, hold reset for 5 seconds until",
         "     the LED flashes. Release.",
         "  3. Wait 2 minutes for boot.",
-        f"  4. Connect via WiFi: MikroTik (default) or cable to any LAN port.",
-        f"  5. Browse to http://192.168.88.1 or SSH: ssh admin@192.168.88.1",
-        "  6. Re-run: lankit apply (from your laptop on the same network)",
+        "  4. Connect via WiFi: MikroTik (default) or cable to any LAN port.",
+        "  5. Browse to http://192.168.88.1 or SSH: ssh admin@192.168.88.1",
+        "  6. Fresh start — re-run: lankit apply (from your laptop, same network)",
+        "     Or restore your last snapshot (works now only, because the reset",
+        f"     config is empty). Latest snapshot: {snap_info}",
+        "       scp <snapshot.rsc> admin@192.168.88.1:lankit-restore.rsc",
+        "       ssh admin@192.168.88.1 '/import file=lankit-restore.rsc'",
         "",
-        "OPTION 2 — RESTORE LAST SNAPSHOT (preserves config history)",
+        "OPTION 2 — RESTORE LAST KNOWN-GOOD STATE (preferred; keeps segments/WiFi)",
         "-" * 72,
-        f"  Latest snapshot: {snap_info}",
+        "  Use this whenever the router is still reachable — no reset needed.",
+        "  Removes everything lankit added since the last good apply and rebuilds",
+        "  it to match that state. This converges the router to the last known-",
+        "  good state — it is NOT a byte-for-byte undo of everything that",
+        "  happened since; manual changes you made on the router by hand are",
+        "  left alone (lankit only touches what it tagged).",
         "",
         f"  1. Connect laptop to router via Ethernet.",
         f"  2. SSH: ssh -i {cfg.router.ssh_key} {cfg.router.ssh_user}@{cfg.router.ip}",
         f"     (try 192.168.88.1 if {cfg.router.ip} is unreachable)",
         f"  3. From your laptop terminal:",
-        f"       lankit restore",
-        f"     Or manually upload and import the snapshot:",
-        f"       scp <snapshot.rsc> {cfg.router.ssh_user}@{cfg.router.ip}:/",
-        f"       ssh {cfg.router.ssh_user}@{cfg.router.ip} '/import file=snapshot.rsc'",
+        f"       lankit rollback",
+        "     It uploads and imports the revert bundle, then verifies the result",
+        "     on the router — you get a clear pass or fail, never a false 'done'.",
+        "  4. If it prints 'did NOT complete': follow the next-steps it prints,",
+        "     then run: lankit probe",
         "",
-        "OPTION 3 — WINBOX ROLLBACK (Windows/Mac GUI)",
+        "  WiFi may drop for a few seconds partway through — the wired network",
+        "  (192.168.88.0/24, any LAN port) stays up the whole time. Plug in if",
+        "  you need to stay connected during the revert.",
+        "",
+        "OPTION 3 — MANUAL ON-ROUTER REVERT (no laptop with lankit installed)",
         "-" * 72,
-        "  1. Download WinBox from mikrotik.com/download",
-        "  2. Connect via MAC address (no IP needed)",
-        "  3. Files → Upload the .rsc snapshot",
-        "  4. New Terminal → /import file=snapshot.rsc",
+        "  Same mechanism as Option 2, run directly on the router. Use this if",
+        "  you have SSH or Winbox access but not a machine with lankit installed.",
+        "",
+        "  Via SSH:",
+        f"    ssh {cfg.router.ssh_user}@{cfg.router.ip}",
+        "    /import file=lankit-revert.rsc",
+        "",
+        "  Via Winbox (Windows/Mac GUI):",
+        "    1. Download WinBox from mikrotik.com/download",
+        "    2. Connect via MAC address (no IP needed)",
+        "    3. New Terminal → /import file=lankit-revert.rsc",
+        "",
+        "  lankit-revert.rsc is already on the router from the last apply. It's",
+        "  safe to re-run if it doesn't finish the first time. Afterward, from a",
+        "  laptop with lankit installed, run: lankit probe",
         "",
         "ROUTER CREDENTIALS",
         "-" * 72,
@@ -89,6 +114,18 @@ def rollback_card(config_path, output):
     for name, seg in cfg.segments.items():
         lines.append(f"  {name:<15} VLAN {seg.vlan_id:<5}  gateway: {seg.gateway}")
 
+    wifi_segments = cfg.segments_with_wifi()
+    if wifi_segments:
+        lines += [
+            "",
+            "WIFI NETWORKS (passwords are on the password card, not here)",
+            "-" * 72,
+        ]
+        for name, seg in wifi_segments.items():
+            hidden = " (hidden)" if seg.ssid_hidden else ""
+            lines.append(f"  {name:<15} SSID: {seg.ssid}{hidden}")
+        lines.append("  Full passwords: lankit password-card")
+
     lines += [
         "",
         "DNS SERVER",
@@ -99,16 +136,30 @@ def rollback_card(config_path, output):
         lines.append(f"  {dns.hostname}  {dns.ip}  (segment: {dns.segment})")
         lines.append(f"  If DNS is down: set manual DNS 1.1.1.1 on your device")
 
+    if dns and dns.enabled and "pihole" in dns.services:
+        lines += [
+            "",
+            "SERVICES",
+            "-" * 72,
+            f"  Pi-hole dashboard:  http://{dns.ip}/admin",
+            f"  Verify DNS:         nslookup google.com {dns.ip}",
+        ]
+
     lines += [
         "",
         "SNAPSHOTS LOCATION",
         "-" * 72,
         f"  ~/.lankit/snapshots/",
-        f"  Run 'lankit restore' to browse and restore interactively.",
+        "  Human-readable history and the source for the factory-reset restore",
+        "  above. Day-to-day recovery uses 'lankit rollback' (Option 2), not a",
+        "  manual snapshot import — run 'lankit restore' to pick a different",
+        "  point in that history if the most recent one isn't what you want.",
         "",
         "=" * 72,
         "  Keep this card in a drawer near the router.",
-        "  Regenerate after each provisioning run: lankit rollback-card",
+        "  Regenerate BOTH cards after any network change — segments, SSIDs,",
+        "  and hosts can all drift out of date otherwise:",
+        "    lankit rollback-card && lankit password-card",
         "=" * 72,
         "",
     ]

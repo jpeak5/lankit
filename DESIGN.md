@@ -9,7 +9,7 @@ A distributable, self-documenting home network segmentation toolkit for MikroTik
 - **One config file** (`network.yml`) is both the setup guide and the source of truth
 - **No network knowledge assumed** — concepts explained inline, briefly
 - **Privacy choices are explicit** — no defaults, must be decided
-- **Templates generate everything** — RouterOS scripts, Pi-hole config, Unbound config, firewall tests, plain-English rules
+- **Templates generate everything** — RouterOS scripts, Pi-hole config, Unbound config, plain-English rules (`lankit explain`/`rules`/`matrix`)
 - **Ansible manages all state** — no manual router/Pi changes
 
 ---
@@ -48,7 +48,8 @@ Two things `pip` cannot install for you:
 | **Python 3.11+** | python.org or your package manager | prerequisite to pip itself |
 | **graphviz binary** *(optional)* | `brew install graphviz` / `apt install graphviz` | system binary; the `graphviz` pip package wraps it but can't install it |
 
-The graphviz binary is only needed for `lankit diagram --png/--svg`.
+The graphviz binary is only needed for `lankit diagram` (default output is
+PNG; `--format svg`/`--format pdf` are also available).
 All other lankit commands work without it.
 
 **Distribution:** lankit is not on PyPI. Feedback and bug reports go to
@@ -88,9 +89,13 @@ lankit discovers it, configures it, and installs everything else.
 | Account | Why | Notes |
 |---------|-----|-------|
 | **MikroTik router login** | lankit SSHes in to apply config | Default is `admin` / no password — change it before you start |
-| **AWS account** *(optional)* | Off-site backup of file shares | Free tier sufficient. Create a scoped IAM user — lankit can do this for you with `lankit aws-setup` |
+| **AWS account** *(optional)* | Off-site backup of file shares | Not yet implemented — see "Future / not built" below. For now, back up file shares by whatever means you already use. |
 
-### PKI / TLS *(optional but recommended)*
+### PKI / TLS *(planned, not yet implemented — see "Future / not built")*
+
+TLS/mkcert work is deliberately deferred. Everything below describes the
+intended design, not current behavior — no `lankit pki` command exists yet.
+Until it lands, portals are served over plain HTTP.
 
 lankit can serve all `*.internal` services over HTTPS using locally-issued
 certificates. This eliminates browser "not secure" warnings and enables
@@ -116,19 +121,13 @@ mkcert -install
 lankit provision
 ```
 
-**Trust propagation:** the local CA certificate needs to be installed on
-every device that will access `*.internal` services (phones, other laptops).
-lankit generates a QR code and instructions for this:
+**Trust propagation (planned):** the local CA certificate would need to be
+installed on every device that will access `*.internal` services (phones,
+other laptops). The intended interface is a `lankit pki --share` command
+that prints a QR code + URL for CA cert download, served from the app server
+at `pki.internal`. None of this exists yet.
 
-```bash
-lankit pki --share       # prints QR code + URL for CA cert download
-                         # served from your app server at pki.internal
-```
-
-iOS and Android users visit `pki.internal` from their browser, tap to install
-the CA profile. One-time per device.
-
-**If you skip TLS:** everything works over HTTP. Browser warnings appear for
+**Today:** everything works over HTTP. Browser warnings appear for
 `*.internal` sites. Acceptable for a single-person setup; less so if household
 members use the portals regularly.
 
@@ -550,108 +549,34 @@ Single-interface design (bulletproof):
 - Apple Private Relay block/allow list
 - No VLAN sub-interfaces on the DNS box — router handles routing
 
-### 3. Firewall Tests
-Generated from `permissions` + `segments`:
+### 3. Verification, not test generation
 
-#### a) Firewall test suite (`tests/`)
+Earlier drafts of this document described a generated testinfra firewall
+suite plus generated `RULES.md` / `TEST-MATRIX.md` output files. None of
+that was built. Their *function* — a plain-English rendering of the rules
+and a segment-to-segment expected-connectivity view — was absorbed into
+three live commands instead, all reading `network.yml` directly (no
+generation step, no separate output files):
 
-Tests are written with [**testinfra**](https://testinfra.readthedocs.io/),
-a pytest plugin for infrastructure testing. testinfra runs on your workstation
-and SSHes into target hosts to execute probes — nothing is installed on the
-tested machines. If you've used pytest, you already know the workflow:
-`pip install pytest-testinfra`, then `pytest tests/`.
+- `lankit explain` — human-readable per-segment rule summary (what
+  `RULES.md` would have been); `--output` writes it to a file if you want one
+- `lankit matrix` — the segment × segment connectivity grid (what
+  `TEST-MATRIX.md` would have been)
+- `lankit rules` — parses the *actual* generated `.rsc` files in
+  `ansible/generated/` and shows the `lankit:`-tagged rules that resulted,
+  filterable by `--segment`/`--unit`
 
-- **Docs:** https://testinfra.readthedocs.io/en/latest/
-- **PyPI:** https://pypi.org/project/pytest-testinfra/
-- **Source:** https://github.com/pytest-dev/pytest-testinfra
+`lankit probe` and `lankit audit` are the closest things to the described
+test suite: `probe` pings each segment's gateway from the router and
+diffs the router's live `lankit:`-tagged config against what `network.yml`
+expects; `audit` does a fuller live inventory pass and classifies every
+lankit-managed resource as ok/missing/drifted/rogue. Neither generates
+SSH-based traffic tests from a device in every VLAN — see "Future / not
+built" for that idea's actual status.
 
-Tests use the same SSH credentials and inventory as Ansible. testinfra
-connects to a host, runs a command (dig, curl, nc), and asserts on the
-result. When a test fails, pytest shows you exactly what happened —
-the command, expected output, actual output — not just "Assertion failed."
-
-**How segments are tested without a device in every VLAN:**
-
-The MikroTik router has an interface on every segment. RouterOS
-`/tool/fetch` and `/ping` can source traffic from any interface,
-simulating a device in that segment. Combined with SSH-able hosts
-in segments that have them (e.g., system76 in trusted, Pi in servers),
-this gives full matrix coverage:
-
-```python
-# Run from your workstation, SSHes into the router
-def test_iot_cannot_reach_trusted(router):
-    """IoT devices must not initiate connections to trusted."""
-    cmd = router.run(
-        "/tool/fetch url=http://10.10.0.19:80 "
-        "src-address=10.30.0.1 mode=http duration=3s"
-    )
-    assert cmd.rc != 0
-
-# SSHes into system76 (trusted segment)
-def test_trusted_can_reach_servers(system76):
-    """Trusted devices can reach services in the servers segment."""
-    cmd = system76.run("curl -sf --max-time 3 http://10.40.0.2:80")
-    assert cmd.rc == 0
-```
-
-Tests are generated from `network.yml`: the `permissions` map and segment
-definitions produce the full expected connectivity matrix. Adding or
-removing a segment automatically updates the test suite.
-
-**Ephemeral by design:** tests run read-only probes over SSH. No scripts
-are copied to target hosts, no packages installed, no artifacts left behind.
-
-#### b) Plain-English rules (`RULES.md`)
-Auto-generated human-readable doc:
-
-```markdown
-## Network Rules
-
-### Trusted (VLAN 10 — "Maple")
-- Can reach: Servers, Media, IoT, Admin
-- Internet: full, unrestricted
-- DNS: filtered through Pi-hole
-- Hardcoded DNS override: allowed (force_dns is off)
-- Devices can see each other
-
-### IoT (VLAN 30 — "Maple-IoT")
-- Cannot reach: any other segment
-- Internet: outbound only (nothing inbound)
-- DNS: filtered through Pi-hole
-- Hardcoded DNS: intercepted and redirected to Pi-hole
-- Bandwidth: 10 Mbps up / 10 Mbps down
-- Devices can see each other
-
-### Guest (VLAN 50 — "Maple-Guest")
-- Cannot reach: any other segment
-- Internet: full, unrestricted
-- DNS: filtered through Pi-hole
-- Hardcoded DNS: intercepted and redirected to Pi-hole
-- Bandwidth: 50 Mbps up / 50 Mbps down
-- Devices CANNOT see each other (client isolation)
-
-### Quarantine (VLAN 70)
-- Cannot reach: any other segment
-- Internet: none
-- DNS: none
-- Devices CANNOT see each other (client isolation)
-- Unknown devices land here until registered
-```
-
-#### c) Test matrix (`TEST-MATRIX.md`)
-Every segment-to-segment pair with expected result:
-
-```
-             trusted  media  iot  servers  guest  quarantine  admin  internet
-trusted         —       Y     Y      Y       —        —         Y       Y
-media           —       —     —      —       —        —         —       Y
-iot             —       —     —      —       —        —         —     Y(out)
-servers         —       —     Y      —       —        —         —       Y
-guest           —       —     —      —      iso       —         —       Y
-quarantine      —       —     —      —       —       iso        —       —
-admin           —       —     —      —       —        —         —       —
-```
+The `tests/` directory that exists today is a Playwright suite for the
+portal UI (`ansible/roles/portal/files/app/`), unrelated to firewall
+verification.
 
 ---
 
@@ -694,57 +619,45 @@ a first-class discovery interface.
 The primary use case: **"I just plugged in a Pi — what is it, and how do
 I get its details into network.yml?"**
 
+The actual command has two flags:
+
 ```bash
-# Show everything on the flat/management network
+# Scan the router for connected devices (DHCP leases + ARP table)
 lankit discover
 
-# Only devices that appeared recently (default: last 10 minutes)
+# First-run wizard — writes a starter network.yml interactively
 lankit discover --new
-lankit discover --new --since 30m
 
-# Filter by vendor
-lankit discover --vendor "Raspberry Pi"
-lankit discover --vendor apple
-
-# Full detail on a specific device
-lankit discover 192.168.88.47
-lankit discover B8:27:EB:00:00:02
-
-# Devices not yet in network.yml
-lankit discover --unknown
-
-# Devices in a specific segment (once VLANs are live)
-lankit discover --segment iot
+# Point at a router directly, bypassing network.yml (e.g. before it exists)
+lankit discover --router 192.168.88.1
 ```
+
+There is no `--since`, `--vendor`, `--unknown`, `--segment`,
+`--update-vendors`, or positional IP/MAC argument, and no separate
+`lankit identify` command — see "Future / not built." `discover` always
+shows the full merged lease + ARP table in one table; vendor lookup and
+private-MAC detection (below) run on every row unconditionally.
 
 Sample output:
 
 ```
-  IP               MAC                Vendor                  Name          Segment
-  192.168.88.1     d4:01:c3:00:00:01  Routerboard.com         router        (this router)
-  192.168.88.47    b8:27:eb:00:00:02  Raspberry Pi Found.     —             ← new, 2m ago
-  192.168.88.251   60:45:2e:00:00:03  System76                laptop        trusted
-  192.168.88.69    4c:b9:ea:00:00:04  iRobot Corporation      vacuum        iot
-  192.168.88.14    4a:00:00:00:00:05  (private/randomized)    my-phone      trusted
-  192.168.88.34    f6:00:00:00:00:06  (private/randomized)    —             ⚠ unknown
+  IP               MAC                Hostname   Vendor                  DHCP Server   Status
+  192.168.88.1     d4:01:c3:00:00:01  router                Routerboard.com         —             —
+  192.168.88.47    b8:27:eb:00:00:02  —          Raspberry Pi Foundation             dhcp1        bound
+  192.168.88.251   60:45:2e:00:00:03  laptop                                         dhcp1        bound
+  192.168.88.69    4c:b9:ea:00:00:04  vacuum     iRobot Corporation                  dhcp1        bound
+  192.168.88.14    4a:00:00:00:00:05  my-phone   private MAC                         dhcp1        bound
 ```
 
 Private MACs are detected via the locally-administered bit (bit 1 of the
-first octet) — no OUI lookup needed. The label `(private/randomized)`
-tells the user why the vendor is unknown and links naturally to the
-registration portal.
+first octet) — no OUI lookup needed.
 
-The guided "new Pi" flow:
-
-```
-$ lankit discover --new
-
-  Found 1 new device:
-  192.168.88.47    b8:27:eb:00:00:02  Raspberry Pi Foundation   appeared 2m ago
-
-  Add to network.yml as dns_server? [y/N] y
-  ✓  network.yml updated. Run: lankit provision dns-server
-```
+The guided setup wizard (`--new`) does not scan the router at all — it's a
+plain prompt sequence (household name, domain, router IP/user, WAN/LAN
+interface names, DNS server IP/MAC) that writes a starter `network.yml`
+with `trusted`/`iot`/`guest` segments. It doesn't inspect the network or
+propose devices to add; that guided "found a new Pi, add it as dns_server?"
+flow described in earlier drafts of this document was never built.
 
 ### Vendor lookup: mac-vendor-lookup
 
@@ -765,293 +678,276 @@ m.lookup('D4:01:C3:00:00:01')   # → 'Routerboard.com'
 Note: `oui` on PyPI is an unrelated audio processing package — do not
 use it.
 
-The OUI database is bundled with the package but can be refreshed:
-
-```bash
-lankit discover --update-vendors   # pulls latest IEEE OUI list
-```
+The OUI database ships with the `mac-vendor-lookup` package and updates
+whenever that dependency is upgraded. There is no `lankit discover
+--update-vendors` flag to refresh it independently.
 
 ---
 
 ## Comment Convention
 
-Every resource the kit creates on the router is tagged with a structured
-comment. This is the API between the config templates, the CLI, the test
-suite, and the router itself.
+Every resource lankit creates on the router is tagged with a structured
+comment. This is the API between the config templates, the CLI, and the
+router itself. The convention went through one rename early on (`kit:` →
+`lankit:`, closed 2026-05-17) — `lankit:` is the only live prefix; nothing
+in the codebase emits or reads `kit:` anymore.
 
-**Format:** `kit:<unit>:<scope>:<resource>`
+**Format:** `lankit:<unit>:<scope>:<resource>`
 
 Examples:
 ```
-kit:vlan:iot:interface           VLAN interface
-kit:dhcp:iot:pool                DHCP pool
-kit:dhcp:iot:server              DHCP server
-kit:dhcp:iot:network             DHCP network config
-kit:fw:iot:egress                Internet egress rule
-kit:fw:trusted>iot:permit        Permission rule (directional)
-kit:fw:iot:dns-redirect          force_dns NAT rule
-kit:fw:iot:isolation             Client isolation rule
-kit:wifi:iot:ap-2g               WiFi virtual AP
-kit:bw:iot:up                    Bandwidth queue
-kit:dns:roomba:static            Static DNS entry
-kit:dhcp:roomba:lease            Static DHCP lease
-kit:fw:netflix-ban:custom        User-defined custom rule
+lankit:vlan:iot:interface           VLAN interface
+lankit:dhcp:iot:pool                DHCP pool
+lankit:dhcp:iot:server              DHCP server
+lankit:dhcp:iot:network             DHCP network config
+lankit:fw:iot:egress                Internet egress rule
+lankit:fw:trusted>iot:permit        Permission rule (directional)
+lankit:fw:iot:dns-redirect          force_dns NAT rule
+lankit:fw:iot:isolation             Client isolation rule
+lankit:wifi:iot:ap-2g               WiFi virtual AP
+lankit:bw:iot:up                    Bandwidth queue
+lankit:dns:roomba:static            Static DNS entry
+lankit:dhcp:roomba:lease            Static DHCP lease
+lankit:fw:netflix-ban:custom        User-defined custom rule
 ```
 
 This enables surgical operations:
-- `find where comment~"kit:fw:iot"` → all IoT firewall rules
-- `find where comment~"kit:fw:"` → all firewall rules
-- `find where comment~"kit:.*:iot"` → everything IoT
-- `find where comment~"kit:fw:.*:custom"` → all user-defined rules
+- `find where comment~"lankit:fw:iot"` → all IoT firewall rules
+- `find where comment~"lankit:fw:"` → all firewall rules
+- `find where comment~"lankit:.*:iot"` → everything IoT
+- `find where comment~"lankit:fw:.*:custom"` → all user-defined rules
 
 Re-provisioning a single segment: remove all resources matching
-`kit:*:<segment>:*`, then re-add from templates. The comment is the
-contract — if it has a `kit:` prefix, the kit owns it.
+`lankit:*:<segment>:*`, then re-add from templates. The comment is the
+contract — if it has a `lankit:` prefix, lankit owns it. (The exact
+tag-to-resource mapping used by the revert mechanism is out of scope for
+this pass — see the Rollback & Recovery section.)
 
 ---
 
 ## CLI
 
-The kit ships a Python CLI for managing the network without editing
-config files or SSHing into the router manually.
+lankit ships a Click-based Python CLI (`lankit/cli/commands/`, one file per
+subcommand, all registered in `lankit/cli/__main__.py`). This is the real
+command set — every command below exists in the code today. Each command's
+`--help` text is the authoritative reference for its flags; what follows is
+a map of what each one is for and how they chain together.
 
-### Device management
-
-```bash
-# Add a device to a segment
-lankit add iot roomba --mac 4C:B9:EA:00:00:04
-  → static DHCP lease, DNS entry (roomba.internal), device registry
-
-# Move between segments
-lankit move roomba trusted
-  → removes old lease/DNS, creates new in trusted, updates registry
-
-# Identify a device
-lankit identify 4C:B9:EA:00:00:04
-  → "roomba, IoT segment, 10.30.0.12, last seen 2m ago"
-
-# Promote from quarantine
-lankit add iot --from-quarantine "the new smart plug"
-  → lists quarantine devices if ambiguous, moves to IoT with a name
-```
-
-### Firewall rules
+### Setup and inspection (no router connection)
 
 ```bash
-# Add a custom rule
-lankit rule add netflix-ban --segment iot --action drop --dst-fqdn netflix.com
-  → Pi-hole DNS block + firewall rule, tagged kit:fw:netflix-ban:custom
-
-# Manage custom rules
-lankit rule disable netflix-ban
-lankit rule list
-lankit rule list --segment iot
+lankit discover --new       # interactive wizard — writes a starter network.yml
+lankit overview              # segments, hosts, permissions, privacy — from network.yml
+lankit generate               # render network.yml → ansible/generated/*.rsc
+lankit explain                 # plain-English per-segment rule summary
+lankit matrix                   # segment × segment connectivity grid
+lankit rules                     # parses ansible/generated/*.rsc, shows lankit:-tagged rules
+lankit diagram                    # GraphViz topology diagram (--format png|svg|pdf, --view)
+lankit secrets                     # SSH key + WiFi password setup, guided by wifi_password_source
+lankit password-card                # printable WiFi password reference card
+lankit rollback-card                 # printable emergency recovery card
 ```
 
-### Provisioning
+`explain` and `rules` look similar but read different things: `explain`
+renders directly from `network.yml` (no generate step needed); `rules`
+parses the actual rendered `.rsc` files, so it reflects whatever was last
+generated, not just what `network.yml` currently says.
+
+### Talking to the router
 
 ```bash
-# Single segment
-lankit provision iot
-
-# Full network
-lankit provision --all
-
-# Status overview
-lankit status
-
-# Run test suite
-lankit test
-lankit test --segment iot
-
-# Print rules in plain English
-lankit rules
-
-# Restore full network from network.yml (no Ansible syntax required)
-lankit restore
-lankit restore --dry-run
-
-# Safe mode — commit or let the router auto-revert
-lankit commit               # make changes permanent after provision/restore
-lankit extend               # reset the failsafe countdown (more time to verify)
-
-# Commit history and rollback
-lankit rollback             # undo the last committed change
-lankit rollback --list      # show commit history
-lankit rollback --to 3      # roll back to 3 commits ago
-
-# Failsafe drill — rehearse the full workflow before touching real config
-lankit test-failsafe
-
-# Generate rollback card (works any time, no router connection needed)
-lankit rollback-card
-lankit rollback-card --html
+lankit discover               # scan for devices (DHCP leases + ARP), no --new
+lankit discover --router IP   # point at a router directly, bypassing network.yml
+lankit apply                   # generate (unless --no-generate) + upload + import all scripts
+lankit apply --segment iot      # only that segment's scripts; global rules omitted
+lankit apply --script NAME        # apply one script by filename
+lankit apply --dry-run              # print what would be applied, no connection
+lankit provision                     # run Ansible: Pi-hole/Unbound (+ app server if enabled)
+lankit provision --host dns_server    # provision one host
+lankit provision --check               # ansible-playbook --check
+lankit reset-provision                  # factory-reset + omnibus self-provision (--dry-run to preview)
+lankit probe                             # compare live router config to network.yml + gateway pings
+lankit audit                              # full live inventory: ok/missing/drifted/rogue per resource
 ```
 
-### Raw .rsc mode
+`discover` (no flags) and `discover --new` are different modes of the same
+command, not separate commands — `--new` skips the router scan entirely
+and runs the wizard.
 
-Power users who prefer working with RouterOS scripts directly can
-generate and apply `.rsc` files without the CLI abstraction:
+### Safety: snapshots, rollback, restore, failsafe
+
+The safety-mechanism *behavior* — what `rollback`/`restore` actually do to
+the router, and the failsafe's revert path — is covered in the Rollback &
+Recovery section below. Every one of these commands runs on lankit's
+tag-scoped revert mechanism (`docs/design/tag-scoped-revert.md`): recovery
+removes everything lankit owns on the router (by `lankit:` tag) and
+rebuilds it from the last known-good archive, verified by reading tags
+back afterward. It is not a raw config-snapshot replay.
 
 ```bash
-# Generate .rsc for a single segment
-lankit generate --segment iot --output generated/
-
-# Generate all .rsc files
-lankit generate --all --output generated/
-
-# Apply a specific .rsc file to the router
-lankit apply generated/03-firewall.rsc
-
-# Dry-run: show what would change (diff against router state)
-lankit apply generated/03-firewall.rsc --dry-run
+lankit commit                # save current router config as a named snapshot
+lankit snapshots              # list local snapshots
+lankit snapshots --capture     # take one on demand
+lankit snapshots --delete N     # delete by index or 'latest'
+lankit rollback                  # restore the pre-apply snapshot
+lankit restore                    # interactively restore any snapshot (--list, or pass a path)
+lankit test-failsafe                # rehearse the failsafe scheduler (-s N seconds)
 ```
 
-This mode is useful for reviewing exact RouterOS commands before
-they run, version-controlling the generated scripts, or integrating
-with existing workflows. The `.rsc` files use the same comment
-convention, so they interoperate cleanly with CLI-managed resources.
+There is no `lankit extend` for "reset the failsafe countdown" — `extend`
+is a different command entirely (see below). There is no `rollback --list`
+or `rollback --to N`; snapshot browsing by index lives on `restore --list`
+instead.
 
----
+### Growing the network
 
-## Interface Contract
-
-The CLI, the web portals, and raw `.rsc` mode are three interfaces
-to the same system. Maintaining them independently would be
-unsustainable. Instead, all three derive from a shared contract:
-
-```
-network.yml (source of truth)
-      │
-      ├── jsonschema (validates config)
-      │
-      ├── Python core library
-      │     ├── config.py     ← reads/validates network.yml
-      │     ├── routeros.py   ← SSH + comment convention CRUD
-      │     ├── pihole.py     ← Pi-hole API/config
-      │     ├── registry.py   ← SQLite device registry
-      │     └── generator.py  ← Jinja2 template rendering
-      │
-      ├── CLI (click or typer)
-      │     └── thin wrappers around core library
-      │
-      ├── Web portals (FastAPI + htmx)
-      │     └── thin wrappers around core library
-      │
-      └── .rsc generation (Jinja2 templates)
-            └── uses generator.py from core library
+```bash
+lankit extend    # interactive wizard: add a new segment to network.yml
+                  # (validates VLAN ID / subnet conflicts, writes via ruamel
+                  # so existing YAML comments survive). Does not apply —
+                  # run 'lankit generate' / 'lankit apply' after.
 ```
 
-Every operation — adding a device, changing a rule, provisioning a
-segment — is a function in the core library. The CLI calls it. The
-portal calls it. The Ansible playbook calls it. There is one
-implementation, multiple entry points.
+`extend` has nothing to do with the failsafe timer, despite the name
+suggesting otherwise in earlier drafts of this document.
 
-The FastAPI endpoints map 1:1 to CLI commands. The htmx portal is
-a browser-friendly skin over the same endpoints. If a CLI command
-exists, the portal can expose it — and vice versa — without
-duplicating logic.
+### Not real commands
+
+`lankit add`, `lankit move`, `lankit identify`, `lankit rule`,
+`lankit status` (renamed `overview`), `lankit test` (there is no testinfra
+wrapper), `lankit pki`, and `lankit aws-setup` do not exist. See
+"Future / not built."
 
 ---
 
 ## Rollback & Recovery
 
 The rollback procedure must work with no internet, no Claude, possibly
-no laptop — just physical access to the router and a printed page.
+no laptop — just physical access to the router, SSH or Winbox, and a
+printed card.
+
+### The revert mechanism, in short
+
+Every `lankit apply` builds and uploads a single self-contained file,
+`lankit-revert.rsc`, to the router *before* touching live config: a
+universal remove-pass (strips every RouterOS row tagged `lankit:`, plus a
+handful of known untagged mutations) followed by the last known-good
+script set, archived at the previous successful apply. Importing the
+bundle **converges** the router's lankit-owned state to that known-good
+state — it is not a byte-faithful rewind of everything that happened
+since, only of what lankit owns. Manual changes made directly on the
+router, outside lankit, are left alone.
+
+The wired `192.168.88.0/24` network (any LAN port, defconf addressing) is
+the guaranteed fallback for the whole operation — nothing the remove-pass
+touches can take it down. WiFi is the one thing that can drop briefly
+partway through, while old lankit SSIDs are removed and new ones rebuilt.
+Full mechanism, ordering, and accepted costs: `docs/design/
+tag-scoped-revert.md`.
+
+A second, unrelated file, `lankit-restore.rsc`, is a raw `/system export`
+snapshot — additive-only, and only reliable when imported onto a
+near-empty config. It exists solely for the post-factory-reset path
+below; the two filenames are kept deliberately distinct so they're never
+confused on the router's file listing.
 
 ### The rollback card
 
 ```bash
-lankit rollback-card           # generate and open PDF
-lankit rollback-card --html    # printable HTML alternative
+lankit rollback-card           # generate the printable text card
+lankit password-card           # generate the matching WiFi password card
 ```
 
-**This command works at any time** — before, during, or after provisioning.
-It reads `network.yml` (for WiFi names) and nothing else. No router
-connection required. Run it before you start, print it, tape it somewhere.
+**This command works at any time** — before, during, or after
+provisioning. It reads `network.yml` for router credentials, segment
+gateways, and SSID names (no passwords — those are on the separate
+`lankit password-card`, which is why the two cards are meant to be kept
+together and regenerated together). No router connection required. Run
+it before you start, print it, keep it near the router.
 
-Generated content:
+The card lays out three recovery paths in order of preference:
 
-```
-NETWORK ROLLBACK CARD
-Household: Maple          Generated: 2026-04-07     Router: MikroTik hAP ax³
+1. **`lankit rollback`** from a laptop, whenever the router is reachable —
+   the preferred path. Verified convergence: a pass/fail you can trust,
+   never a silent "done" over a failure.
+2. **Manual on-router revert** — `/import file=lankit-revert.rsc` over
+   SSH or Winbox, for when a laptop with lankit installed isn't
+   available. Same mechanism as (1), same file, safe to re-run if it
+   doesn't finish.
+3. **Factory reset**, last resort — loses all config. Reconnect on the
+   flat `192.168.88.0/24` network afterward, then either re-run `lankit
+   apply` for a fresh start, or additive-import the last snapshot with
+   `lankit-restore.rsc` (the one case where that kind of import works,
+   because the post-reset config is empty).
 
-━━━ IF THE INTERNET STOPS WORKING ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+See `lankit/cli/commands/rollback_card.py` for the generated text.
 
-OPTION A — Restore lankit config (keeps your segments)
-  1. Connect laptop to router via ethernet cable
-  2. Open terminal in your lankit directory
-  3. Run: lankit restore
-
-OPTION B — Full factory reset (flat network, always works)
-  1. Unplug router power, wait 10 seconds
-  2. Hold the reset button on the router
-  3. Plug power back in — keep holding until LED flashes, then release
-  4. Connect laptop to router via ethernet cable
-  5. Open browser → http://192.168.88.1
-  6. Login: admin / (no password)
-     ✓ You now have a working flat network.
-  7. When ready to restore lankit: run lankit restore
-
-━━━ WIFI PASSWORDS ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Maple:            ______________________________
-  Maple-IoT:        ______________________________
-  Maple-Guest:      ______________________________
-
-━━━ KEY ADDRESSES ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Router:     192.168.88.1
-  DNS server: 10.40.0.2
-  Fallback:   http://192.168.88.1  (router admin, always reachable via ethernet)
-```
-
-WiFi passwords are blank — fill in by hand after printing. Never stored
-in plain text. The card lives on the fridge or taped inside a cabinet.
-
-### lankit restore
-
-`lankit restore` re-provisions the full network from `network.yml`. It is
-the only restore command a user ever needs to know. No Ansible syntax,
-no playbook paths, no flags.
+### lankit rollback / lankit restore
 
 ```bash
-lankit restore           # re-provision everything from network.yml
-lankit restore --dry-run # show what would change without applying
+lankit rollback           # revert to the state before the last apply
+lankit restore             # interactively restore an earlier snapshot's state
+lankit restore --list       # browse available snapshots
 ```
 
-Under the hood it runs the Ansible playbook — that's an implementation
-detail users never need to know.
+Under the tag-scoped revert mechanism, **"restore snapshot X" means:
+converge lankit-owned router state to the lankit state that was live when
+X was captured** — not replay X. Every snapshot in `~/.lankit/snapshots/`
+is paired, at save time, with the known-good archive that was current
+then (a copy of the rendered `.rsc` scripts, including WiFi passphrases —
+raw exports omit those, and can't be filtered into a rebuild reliably).
+`rollback`/`restore` resolve the target snapshot to its paired archive,
+build a fresh `lankit-revert.rsc` from [remove-pass] + [that archive],
+upload and verify it landed, import it, then read the router's tags back
+and compare against what the archive expects. A green success mark is
+only ever printed after that verification passes — never after the
+import alone.
+
+If the chosen snapshot has no paired archive (it predates this
+mechanism, or was saved outside lankit's index), the command says so
+plainly and offers two honest options instead of pretending a tag-scoped
+restore happened: a **remove-only revert** (strip everything lankit
+owns; the router converges to defconf plus whatever's there manually —
+the wired flat network stays up, lankit's segments/WiFi/DHCP go away),
+or the **factory-reset + additive-import** path.
 
 ### Scheduler-based failsafe
 
-`lankit apply` protects every push with a **scheduler-based failsafe**. This
-is not RouterOS safe mode (the CTRL+X / F4 kernel mechanism) — it is a
-RouterOS scheduler job that lankit installs before uploading any scripts.
+`lankit apply` protects every push with a **scheduler-based failsafe**.
+This is not RouterOS safe mode (the CTRL+X / F4 kernel session
+mechanism) — it's a normal RouterOS `/system scheduler` job, installed
+before any script is imported, that survives even if the SSH session
+drops.
 
 How it works:
 
-1. Before touching anything, lankit exports the current router config and
-   saves it locally as a snapshot. It also uploads the snapshot to the router
-   as `lankit-restore.rsc`.
-
-2. lankit installs a RouterOS scheduler job named `lankit-failsafe` with a
-   countdown of `failsafe_seconds`. The job's on-event is:
-   ```
-   /import file=lankit-restore.rsc
-   ```
-
-3. lankit uploads and imports each `.rsc` script in sequence.
-
-4. After all scripts are applied, lankit prompts you to confirm. If you
-   confirm, the scheduler is cancelled and the changes are permanent. If you
-   decline, lankit cancels the scheduler and immediately runs the restore
-   itself.
-
-5. If the SSH session drops mid-apply — because a script broke routing, the
-   laptop lid closed, etc. — the scheduler fires automatically when the
-   countdown expires and imports the pre-apply snapshot, reverting the router
-   to its last known-good state.
+1. Before touching anything, lankit captures the current master-WiFi
+   state, builds `lankit-revert.rsc` from the last known-good archive (a
+   remove-pass-only bundle on the very first apply, since nothing
+   lankit-owned exists yet to rebuild), uploads it to the router, and
+   verifies the upload landed at the expected size. Nothing else
+   proceeds until that verification passes — no scheduler, no script
+   imports, on an unconfirmed file.
+2. lankit installs a self-deleting one-shot scheduler job named
+   `lankit-failsafe` with a countdown of `failsafe_seconds`. Firing
+   removes itself first (so it can't fire twice), imports
+   `lankit-revert.rsc`, and leaves behind a durable marker
+   (`lankit-failsafe-fired`) recording success or failure — RouterOS's
+   own `/log` buffer is small and rotates, too unreliable to be the only
+   signal a returning user sees weeks later.
+3. lankit uploads and imports each generated `.rsc` script in sequence.
+4. Once all scripts are in, the failsafe window is reset so the full
+   countdown is available for the decision (not whatever survived the
+   upload phase), and lankit asks: **"Keep these changes?"** Answering
+   yes disarms the scheduler and the changes stay. **`lankit commit` is
+   a separate command** — it only saves a named snapshot and has nothing
+   to do with disarming the failsafe. Answering no (or letting the
+   countdown expire) imports `lankit-revert.rsc` immediately and
+   verifies convergence, printing a loud, unmissable failure — never a
+   false success — if it didn't converge.
+5. If the SSH session drops mid-apply, the scheduler fires on its own
+   countdown and runs the same import + verification, with no laptop
+   involved.
 
 This is categorically different from RouterOS safe mode:
 
@@ -1060,85 +956,74 @@ This is categorically different from RouterOS safe mode:
 | Activation | CTRL+X in terminal / F4 in Winbox | Scheduler job installed via SSH |
 | Scope | Session-level kernel buffer | RouterOS `/system scheduler` |
 | Revert trigger | Session ends or keep-alive timeout | Scheduler fires after `failsafe_seconds` |
-| Revert mechanism | Router discards buffered changes | `/import file=lankit-restore.rsc` |
+| Revert mechanism | Router discards buffered changes | Imports `lankit-revert.rsc` (remove-pass + rebuild), then verifies |
 | Survives reconnect | No (tied to the session) | Yes (scheduler persists until cancelled) |
 
 The timeout is configurable in `network.yml`:
 
 ```yaml
-# How long before the failsafe scheduler fires if not cancelled.
-# Longer gives more time to verify; shorter limits exposure if something
-# goes wrong. Must be long enough that the apply itself completes before
-# the window expires — if the apply takes longer than failsafe_seconds,
-# the scheduler fires during the apply and reverts a partial state.
-# The default of 120 seconds is generous for most home-network script sets.
-failsafe_seconds: 120
+# lankit apply protects every push with a countdown scheduler on the
+# router — not RouterOS "safe mode"; a normal /system scheduler job
+# that survives even if your SSH session drops. If it fires, it removes
+# everything lankit added and rebuilds the last known-good state.
+# Answering "yes" at the apply confirmation prompt is what disarms it —
+# lankit commit is a separate command and does not touch the failsafe.
+failsafe_seconds: 300
 ```
 
-Known limitation: if your script set takes longer to import than
-`failsafe_seconds`, the scheduler fires mid-apply and the router reverts to
-the pre-apply snapshot mid-run. Increase `failsafe_seconds` if you have a
-large or slow-executing script set. The `lankit test-failsafe` command
-verifies the scheduler fires and reverts correctly before you trust it on a
-live apply.
+Known limitation: if the script set takes longer to import than
+`failsafe_seconds`, the scheduler can fire mid-apply. `lankit apply`
+resets the countdown after all scripts finish importing and before
+asking you to decide, so in practice this only bites during the
+upload/import phase itself, not the decision window.
+
+Residual limitation, not fixed by this design: if the router **reboots**
+during the failsafe window, the scheduler's start time passes while it's
+down and the one-shot never fires on boot. Recovery is then manual —
+`lankit rollback`, or on-router `/import file=lankit-revert.rsc` (which
+this design at least makes possible and re-runnable).
 
 The only path that bypasses the failsafe entirely is `lankit generate` +
 manual `.rsc` apply — the power-user path, where the user has explicitly
 chosen to manage changes themselves.
 
-### Commit history and rollback
-
-Every `lankit commit` saves a RouterOS config snapshot (via `/system export`)
-and pushes it onto a local stack. `lankit rollback` restores the previous
-snapshot — the same command whether you're undoing a test, a bad provision,
-or a mistaken rule change.
-
-```bash
-lankit rollback          # undo the last committed change
-lankit rollback --list   # show commit history
-lankit rollback --to 3   # roll back to 3 commits ago
-```
-
-The stack:
-```
-lankit provision → commit  [1] initial segments
-lankit provision → commit  [2] added guest bandwidth limit
-lankit provision → commit  [3] added netflix-ban rule   ← lankit rollback undoes this
-```
+After any failsafe fire — whether you were there to see it or not — run
+`lankit probe`. It reads live router tags and reports exactly what's
+missing or unexpected against what should be there. lankit also checks
+for the durable fired-marker on every subsequent connect and warns
+loudly before doing anything else if one is found uncleared.
 
 ### Failsafe drill — lankit test-failsafe
 
-Before touching real config, users should rehearse the full safe mode
-workflow under low stakes. `lankit test-failsafe` is that rehearsal.
+Before touching real config, rehearse the failsafe scheduler under low
+stakes:
 
 ```bash
-$ lankit test-failsafe
-
-  Applying test change in safe mode:
-    failsafe-test.internal → 10.99.99.99
-
-  Verify it's live:
-    dig +short failsafe-test.internal @10.40.0.2
-    → should return 10.99.99.99
-
-  Now choose a path to test:
-
-  PATH A — test auto-revert:
-    Let the 120-second window expire without running 'lankit commit'.
-    Then verify the entry is gone:
-    dig +short failsafe-test.internal @10.40.0.2
-    → should return nothing
-
-  PATH B — test commit + rollback:
-    lankit commit
-    dig +short failsafe-test.internal @10.40.0.2   → 10.99.99.99
-    lankit rollback
-    dig +short failsafe-test.internal @10.40.0.2   → nothing
+$ lankit test-failsafe -s 30
 ```
 
-This is a genuine rehearsal of the real workflow — `lankit rollback` here
-is the same command used for real rollbacks. No special flags, no cleanup
-command. Users learn the real tools under safe conditions.
+Today this drills the scheduler *mechanics*, not a full revert:
+pre-flight cleanup of any leftover sentinel/scheduler from a prior run,
+install the real `lankit-failsafe` scheduler plus a disabled,
+`lankit:`-tagged sentinel firewall rule, verify the sentinel is present,
+reschedule the timer in place and verify the start-time actually moved,
+then wait for the (rescheduled) timer to fire and verify the sentinel is
+gone — five phases in total. The on-event shape mirrors production
+(self-delete → import → log markers) and the timer/reschedule primitives
+are the exact ones `apply.py` uses, but the "import" is a one-line
+removal of the sentinel rule, not the production `lankit-revert.rsc` —
+so this proves the mechanical scaffolding (scheduler self-delete,
+on-event-triggered import, reschedule-in-place) rather than a genuine
+remove-and-rebuild of lankit state. No segment, VLAN, WiFi, or DHCP
+config is touched by the default drill; it's safe on a live household
+network.
+
+A `--full` mode that builds and imports the actual `lankit-revert.rsc`
+end-to-end — real churn, brief WiFi/DHCP disruption, meant for the lab
+router or a user who wants genuine remove-and-rebuild certification — is
+designed (execution plan G1.9, `docs/design/tag-scoped-revert.md` §12)
+but not yet implemented. Until it lands, the default drill above is the
+only rehearsal available.
 
 ---
 
@@ -1167,62 +1052,107 @@ not on day one.
 
 ## Registration Portal
 
-Solves the Apple Private MAC problem:
+Addresses the Apple Private MAC problem, but more modestly than earlier
+drafts of this document claimed. What `register.internal` actually does
+today (`ansible/roles/portal/files/app/app.py`):
 
-1. New device joins WiFi → lands in quarantine (or assigned segment if MAC is known)
-2. User opens browser → captive portal redirect to `register.internal`
-3. Portal shows: "Welcome to [household]. Register this device to get internet access."
-4. User enters: device name, who it belongs to
-5. Portal records: real MAC (from ARP), display name, owner, timestamp
-6. Ansible can then: assign static lease, place in correct segment, give it a `*.internal` name
+1. A household member visits `register.internal` from their device.
+2. The portal looks up their MAC via the Pi-hole client list for their
+   current IP, and shows any existing name.
+3. They submit a name (validated: letters/digits/hyphens, not a reserved
+   prefix like `register` or `dns`).
+4. The portal writes a Pi-hole custom DNS entry (`<name>.internal` →
+   their current IP) and updates the Pi-hole client's comment.
 
-For Apple devices: the portal explains what Private MAC is, and offers a link to the iOS Settings path to disable it for this network. Registration works either way — it just means the device may get a new IP when the MAC rotates.
+There is no static DHCP lease assignment, no segment reassignment, and
+nothing is written back to `network.yml` or the router — this is a Pi-hole
+DNS naming convenience, not device management. If the device's IP changes
+(e.g. a rotating private MAC gets a new DHCP lease), the DNS entry stops
+matching until the device re-registers. Segment placement and static
+leases are still a manual `network.yml` + `lankit apply` job — see
+"Future / not built."
+
+---
+
+## Future / not built
+
+Earlier drafts of this document described several subsystems as if they
+existed. They don't. This section is the single place that tracks them, so
+the sections above can stay honest about current behavior. Where a listed
+idea's *function* was absorbed by something real, that's noted.
+
+- **Device management commands** — `lankit add`, `lankit move`,
+  `lankit identify`, `lankit rule` (custom per-device firewall rules) and
+  the SQLite-backed device registry they'd write to. Today, adding or
+  moving a device means editing `network.yml`'s `hosts:` and segment
+  definitions by hand and re-running `lankit apply`. There is no
+  persistent device registry anywhere in the codebase.
+- **`lankit status`** — renamed to `lankit overview` (already done); the
+  old name is dead, not a synonym.
+- **`lankit test`** — a testinfra wrapper for a generated firewall test
+  suite. Never built. `lankit probe` and `lankit audit` (real, live-router
+  checks) and `lankit rules`/`explain`/`matrix` (real, config-derived
+  checks) cover most of the intended use — see "Verification, not test
+  generation" above. A true SSH-into-every-segment traffic test is still
+  open (tracked as post-1.0 hardware-breadth work).
+- **`RULES.md` / `TEST-MATRIX.md` generated files** — absorbed by
+  `lankit explain` and `lankit matrix`, which render on demand instead of
+  writing files (unless you pass `--output`).
+- **`lankit discover --vendor / --segment / --unknown / --update-vendors
+  / --since`, a positional device argument** — `discover` only has
+  `--new` and `--router` today. Filtering, per-device lookup, and
+  "unregistered device" detection don't exist.
+- **`lankit pki --share`** and locally-issued `*.internal` TLS via mkcert —
+  deliberately deferred (see the PKI/TLS section above). Portals are HTTP-only
+  today.
+- **`lankit aws-setup`** — no AWS integration of any kind exists.
+- **The `vpn:` config field** — `network.yml` has a `vpn:` CHOOSE field
+  (wireguard/ipsec/none), but nothing reads it except to write `none`
+  through the setup wizard. No WireGuard or IPsec template exists. Choose
+  `none` until this lands.
+- **Registration portal assigning static leases / segments** — the
+  portal (`register.internal`) exists and works, but only writes a
+  Pi-hole custom DNS entry + client comment for the requesting IP. It
+  does not touch `network.yml`, static DHCP leases, or segment
+  assignment — see the Registration Portal section above.
 
 ---
 
 ## File Structure
 
+This reflects the actual layout, checked against the repo — not an
+aspirational one.
+
 ```
 lankit/
 ├── DESIGN.md                ← this file
-├── network.yml              ← user fills this out
-├── network.schema.json      ← jsonschema for validation
+├── README.md, TESTING.md
+├── network.yml.dist         ← template — copy to network.yml and fill in CHOOSE fields
+├── network.yml               ← user's private config (gitignored)
+├── network.schema.json         ← JSON Schema for validation
 │
-├── core/                    ← shared Python library
-│   ├── config.py            ← reads + validates network.yml
-│   ├── routeros.py          ← SSH + comment convention CRUD
-│   ├── pihole.py            ← Pi-hole API/config
-│   ├── registry.py          ← SQLite device registry
-│   └── generator.py         ← Jinja2 template rendering
-│
-├── cli/                     ← CLI entry point (python -m lankit)
-│   ├── __main__.py
-│   └── commands/
-│       ├── discover.py      ← network discovery, vendor lookup, guided Pi setup
-│       ├── add.py           ← device add/move/identify
-│       ├── rule.py          ← custom firewall rules
-│       ├── provision.py     ← segment/full provisioning
-│       ├── generate.py      ← .rsc file generation
-│       ├── apply.py         ← .rsc application + dry-run
-│       ├── status.py        ← network status
-│       ├── test.py          ← testinfra wrapper
-│       ├── restore.py       ← full re-provision from network.yml
-│       ├── commit.py        ← confirm safe mode, push to commit stack
-│       ├── extend.py        ← reset failsafe countdown
-│       ├── rollback.py      ← restore previous commit from stack
-│       ├── test_failsafe.py ← rehearse safe mode workflow with DNS entry
-│       └── rollback_card.py ← generate printable PDF/HTML rollback card
-│
-├── web/                     ← FastAPI + htmx portals
-│   ├── app.py               ← FastAPI application
-│   ├── templates/           ← Jinja2 + htmx templates
-│   └── static/              ← htmx.min.js, CSS
+├── lankit/
+│   ├── core/                    ← shared Python library
+│   │   ├── config.py            ← reads + validates network.yml
+│   │   ├── generator.py         ← Jinja2 template rendering → .rsc scripts
+│   │   ├── router.py            ← RouterOS SSH connection (RouterConnection)
+│   │   ├── snapshots.py         ← local config snapshot management
+│   │   └── passwords.py         ← WiFi password sourcing (vault/env/prompt)
+│   │
+│   └── cli/
+│       ├── __main__.py          ← Click group; registers every command below
+│       └── commands/            ← one file per subcommand (see CLI section)
+│           ├── discover.py, status.py (registers as "overview")
+│           ├── generate.py, apply.py, provision.py, reset_provision.py
+│           ├── explain.py, matrix.py, rules.py, diagram.py, audit.py, probe.py
+│           ├── commit.py, snapshots_cmd.py, rollback.py, restore.py
+│           ├── test_failsafe.py, rollback_card.py, password_card.py
+│           └── secrets.py, extend.py
 │
 ├── ansible/
-│   ├── site.yml             ← main playbook
-│   ├── inventory.yml        ← generated from hosts section
+│   ├── site.yml              ← main playbook (run by lankit provision)
 │   ├── roles/
-│   │   ├── router/          ← MikroTik .rsc templates
+│   │   ├── router/           ← MikroTik .rsc templates
 │   │   │   └── templates/
 │   │   │       ├── 01-vlans.rsc.j2
 │   │   │       ├── 02-dhcp.rsc.j2
@@ -1231,23 +1161,30 @@ lankit/
 │   │   │       ├── 05-dns.rsc.j2
 │   │   │       ├── 06-dns-redirect.rsc.j2
 │   │   │       └── 07-bandwidth.rsc.j2
-│   │   ├── dns-server/      ← Pi-hole + Unbound (single role)
-│   │   │   └── templates/
-│   │   │       ├── pihole.toml.j2
-│   │   │       └── unbound.conf.j2
-│   │   ├── caddy/           ← Caddy web server for app_server
-│   │   └── portal/          ← placeholder HTML pages for *.internal portals
-│   └── generated/           ← output: .rsc scripts, RULES.md, TEST-MATRIX.md
+│   │   ├── dns-server/       ← Pi-hole + Unbound (single role)
+│   │   ├── caddy/            ← Caddy web server for app_server
+│   │   └── portal/           ← the Flask app (files/app/app.py + templates),
+│   │                            deployed by Ansible, served by Caddy. Beta,
+│   │                            optional, off by default (hosts.app_server.enabled)
+│   └── generated/            ← output: rendered .rsc scripts only (gitignored)
 │
-├── tests/                   ← testinfra suite
-│   ├── conftest.py          ← fixtures: router, hosts per segment
-│   ├── test_firewall.py     ← inter-segment connectivity matrix
-│   ├── test_dns.py          ← resolution + redirect + filtering
-│   └── test_bandwidth.py    ← queue enforcement
+├── tests/                    ← Playwright suite for the portal UI
+│   ├── conftest.py
+│   ├── interfaces/, mixins/
+│   └── test_me.py, test_network.py, test_register.py, test_apps.py
 │
 └── docs/
-    └── privacy-choices.md   ← standalone deep-dive on privacy options
+    ├── mission.md, personas.md
+    ├── apps/                 ← portal specs (architecture.md, me/network/register/apps-internal.md)
+    ├── enhancements/          ← frozen archive; live queue is GitHub issues
+    └── screenshots/
 ```
+
+There is no `lankit/web/` FastAPI package, no `core/routeros.py` /
+`pihole.py` / `registry.py`, and no top-level `core/` — the real core
+library lives under `lankit/core/` with the five files listed above.
+Anything resembling a device registry (SQLite or otherwise) does not
+exist; see "Future / not built."
 
 ---
 
@@ -1280,38 +1217,26 @@ A Rich tree in the README says "CLI tool." The GraphViz diagram says
 **The diagram ships with lankit** — generated from the sample `network.yml`
 that comes with the repo (a fictional household, not the user's real data).
 Device names are generic but believable: a laptop, a phone, a Roomba, a TV.
-The quarantine node showing `⚠ unknown device — run: lankit identify` is
-deliberately included — it shows the system is *alive*, not just configured.
+The quarantine node showing an unresolved/unknown device is deliberately
+included — it shows the system is *alive*, not just configured. (There is
+no `lankit identify` command to point at in the label — see "Future / not
+built.")
 
-**GraphViz is optional, never required.** If `dot` is not on PATH, every
-`lankit` command works normally. `lankit diagram` gracefully falls back:
+**GraphViz is required for `lankit diagram` specifically** — every other
+lankit command works without it. If the `graphviz` Python package isn't
+installed, or the `dot` binary isn't on PATH, `lankit diagram` prints a
+clear error and exits; it does not currently fall back to an ASCII tree
+view (an earlier draft of this document described one — it was never
+built).
 
-```
-$ lankit diagram
-  graphviz not found — install it to generate network diagrams.
-  brew install graphviz  /  apt install graphviz
-
-  Showing tree view instead:
-
-  Maple (MikroTik hAP ax³)
-  ├── trusted   10.10.0.0/24  ● 8 devices
-  ├── iot       10.30.0.0/24  ● 4 devices
-  ├── servers   10.40.0.0/24  ● 2 devices
-  ├── guest     10.50.0.0/24  ● 1 device
-  └── quarantine 10.70.0.0/24  ⚠ 1 unknown
-```
-
-The README diagram is the reason to install GraphViz — it shows what you'd
-be missing. The tree is always available and sufficient for day-to-day use.
-
-**Generated diagram formats:**
+**Real diagram flags:**
 
 ```bash
-lankit diagram              # PNG (default, opens in viewer)
-lankit diagram --svg        # SVG (for web embedding)
-lankit diagram --dot        # raw .dot source (for editors/CI)
-lankit diagram --ascii      # ASCII via graph-easy if installed
+lankit diagram                          # network.png in the current directory
+lankit diagram --format svg             # or png / pdf
+lankit diagram --output mynet.png       # choose the output path
+lankit diagram --view                   # open it after generating
 ```
 
-The `.dot` source is also written to `generated/network.dot` on every
-`lankit provision` run, so the diagram stays current automatically.
+There is no `--dot` or `--ascii` flag, and nothing writes a `.dot` source
+file automatically on `lankit provision`.

@@ -12,9 +12,12 @@ import errno
 import socket
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 import paramiko
+
+if TYPE_CHECKING:
+    from lankit.core.revert import MasterWifiFacts
 
 
 class RouterError(Exception):
@@ -228,6 +231,49 @@ class RouterConnection:
     def export_config(self) -> str:
         """Return the full /export verbose output."""
         return self.run("/export verbose", timeout=60)
+
+    def read_lankit_tags(self) -> set[str]:
+        """Read every lankit:/kit:-prefixed comment tag currently live on
+        the router, across every table lankit writes to (see
+        lankit.core.revert.TAG_TABLES). Skips (rather than errors on) any
+        table whose print command fails — e.g. WiFi tables on hardware
+        without the wifi package. Single canonical source for this: used
+        by probe's config audit, apply's migration bootstrap, and the
+        revert-verification path (decline/import-error) that must never
+        print a success mark over a silent partial failure."""
+        from lankit.core import revert
+        raw_outputs: dict[str, str] = {}
+        for table in revert.TAG_TABLES:
+            out, err = self.run_tolerant(table.print_cmd)
+            if not err:
+                raw_outputs[table.id] = out
+        return revert.read_live_tags(raw_outputs)
+
+    def read_master_wifi_facts(self) -> Optional["MasterWifiFacts"]:
+        """Capture wifi1/wifi2's current SSID and hidden state, for the
+        revert bundle's master-WiFi restore block. Returns None (fail-open,
+        design §5.3) if the print command errors or either master's fields
+        can't be read — the caller should then omit master_wifi_facts from
+        build_remove_pass rather than guess."""
+        from lankit.core import revert
+        out, err = self.run_tolerant("/interface wifi print detail without-paging")
+        if err:
+            return None
+        return revert.read_wifi_master_facts(out)
+
+    def verify_uploaded_file(self, remote_path: str, expected_size: int) -> bool:
+        """Confirm a file landed on the router with exactly the expected
+        byte size before anything depends on it being complete — most
+        importantly, the failsafe scheduler must never be armed against a
+        partially-uploaded revert bundle (design §6)."""
+        import re
+        out, err = self.run_tolerant(f'/file print detail where name="{remote_path}"')
+        if err or remote_path not in out:
+            return False
+        m = re.search(r'size=(\d+)', out)
+        if not m:
+            return False
+        return int(m.group(1)) == expected_size
 
     def identity(self) -> str:
         """Return the router system identity."""
