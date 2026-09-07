@@ -1174,10 +1174,12 @@ lankit/
 │   └── test_me.py, test_network.py, test_register.py, test_apps.py
 │
 └── docs/
-    ├── mission.md, personas.md
+    ├── design/               ← design docs for shipped behaviour
     ├── apps/                 ← portal specs (architecture.md, me/network/register/apps-internal.md)
-    ├── enhancements/          ← frozen archive; live queue is GitHub issues
     └── screenshots/
+
+(Planning material — mission, personas, the execution plan, and the frozen
+ ENH-001..025 archive — lives in the separate lankit-workshop repo.)
 ```
 
 There is no `lankit/web/` FastAPI package, no `core/routeros.py` /

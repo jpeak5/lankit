@@ -2,7 +2,7 @@
 
 - **Status:** **signed off 2026-07-07 (checkpoint G1.1a), with four amendments below.** G1.2 may proceed.
 - **Date:** 2026-07-06 (amended 2026-07-07)
-- **Unit:** G1.1 of the v1.0 execution plan (`docs/v1-readiness-review.md`, Part 4)
+- **Unit:** G1.1 of the v1.0 execution plan (tracked in the lankit-workshop repo)
 - **Consumers:** G1.2 (`lankit/core/revert.py`), G1.3 (`apply.py` wiring), G1.4 (`rollback.py`/`restore.py`), G1.5 (rollback target selection), G1.9 (`test-failsafe` drill), G3.7 (fasttrack), G2.2 (safety copy)
 - **Decided context (not relitigated here):** automatic recovery reverts by `lankit:` tag ownership — remove lankit-owned resources, rebuild known-good lankit state. Additive import of a raw `/export` snapshot remains valid only after a factory reset (rollback-card path).
 
@@ -12,7 +12,7 @@
 
 Every automatic recovery path today — the failsafe scheduler, the apply decline/import-error paths, `lankit rollback`, `lankit restore` — "restores" by running `/import` of a raw `/export verbose` snapshot over the live config (`apply.py:135-138, 256-268`; `rollback.py:58-62`; `restore.py:97-101`). RouterOS `/import` is additive and halts at the first error; against a config that a bad apply just added rules to, the snapshot's `add` commands hit duplicates almost immediately, the import aborts, and the bad rules stay. The scenario the failsafe exists for is the scenario where snapshot import is least likely to work (readiness review, Part 2, finding S1).
 
-Compounding it, all three CLI restore paths print import stderr as a yellow warning and then print a green success mark (S1), and `test-failsafe` certifies the timer with a targeted rule-remove, never the actual revert payload — false assurance on exactly the property `docs/mission.md:66` calls non-negotiable. This design specifies the replacement mechanism: a single, self-contained, idempotent **revert bundle** (`lankit-revert.rsc`) that removes everything lankit owns and rebuilds the last known-good lankit state, plus the verification and loud-failure contract every caller must obey.
+Compounding it, all three CLI restore paths print import stderr as a yellow warning and then print a green success mark (S1), and `test-failsafe` certifies the timer with a targeted rule-remove, never the actual revert payload — false assurance on exactly the property the project mission calls non-negotiable: that recovery must actually recover. This design specifies the replacement mechanism: a single, self-contained, idempotent **revert bundle** (`lankit-revert.rsc`) that removes everything lankit owns and rebuilds the last known-good lankit state, plus the verification and loud-failure contract every caller must obey.
 
 ## 2. Mechanism overview
 

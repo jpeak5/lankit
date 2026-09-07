@@ -1,5 +1,5 @@
 """
-Shared fixtures for the offline unit suite (Layer 1 of docs/test-harness.md).
+Shared fixtures for the offline unit suite (Layer 1 of the test harness; strategy doc lives in lankit-workshop).
 
 Everything here runs without hardware, network, or a live router. Config
 fixtures are loaded by explicit Path — never from cwd or LANKIT_CONFIG.
