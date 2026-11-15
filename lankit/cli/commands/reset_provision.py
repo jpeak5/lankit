@@ -1,4 +1,5 @@
 import click
+from lankit.core.generator import generated_dir as _generated_dir
 from lankit.cli.__main__ import cli
 
 
@@ -71,7 +72,7 @@ def reset_provision(config_path, dry_run, output):
     pub_key = pub_key_path.read_text().strip()
 
     # ── Generate scripts ──────────────────────────────────────────────────────
-    generated_dir = Path("ansible/generated")
+    generated_dir = _generated_dir(cfg)
     console.print("[dim]Generating scripts from network.yml...[/dim]")
     try:
         script_paths = generate_all(cfg, generated_dir, wifi_passphrases)

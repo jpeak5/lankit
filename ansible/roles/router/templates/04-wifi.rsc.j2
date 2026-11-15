@@ -20,15 +20,29 @@
 {% endfor %}
 {% endif %}
 
-{% if include_globals %}
+{% set bands = namespace(g5=false, g2=false) %}
+{% for seg in segments.values() if seg.has_wifi %}
+{% if '5ghz' in seg.wifi_bands %}{% set bands.g5 = true %}{% endif %}
+{% if '2ghz' in seg.wifi_bands %}{% set bands.g2 = true %}{% endif %}
+{% endfor %}
+{% set uses_5g = bands.g5 %}
+{% set uses_2g = bands.g2 %}
+{% if include_globals and (uses_5g or uses_2g) %}
 # ── Hide master interfaces ───────────────────────────────────────────────────
+# Only for bands some segment uses: a router without that radio (or with no
+# radios at all) would otherwise fail `set` with "no such item" and halt the
+# import (#62). Radio names are still assumed: wifi1 = 5 GHz, wifi2 = 2.4 GHz.
 /interface wifi
+{% if uses_5g %}
 set wifi1 \
     configuration.ssid="_master-5g-noconnect" \
     configuration.hide-ssid=yes
+{% endif %}
+{% if uses_2g %}
 set wifi2 \
     configuration.ssid="_master-2g-noconnect" \
     configuration.hide-ssid=yes
+{% endif %}
 {% endif %}
 
 # ── Security profiles ────────────────────────────────────────────────────────

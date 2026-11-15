@@ -124,6 +124,9 @@ class Config:
     portals: dict[str, bool]  # portal name → enabled
     dns_ip: str                # IP handed to devices via DHCP — Pi-hole or public DNS
     tls: Optional[TLS] = None
+    # Directory of the network.yml this was loaded from. Site outputs
+    # (generated scripts, apply.log) live here, never in the tool.
+    config_dir: Optional[Path] = None
 
     def segments_with_wifi(self) -> dict[str, Segment]:
         return {n: s for n, s in self.segments.items() if s.has_wifi}
@@ -370,6 +373,7 @@ def _build_config(raw: dict, config_path: Optional[Path] = None) -> Config:
         portals=portals,
         dns_ip=dns_ip,
         tls=tls,
+        config_dir=(config_path.parent if config_path else Path.cwd()).resolve(),
     )
 
 

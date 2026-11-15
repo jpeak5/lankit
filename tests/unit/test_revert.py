@@ -7,8 +7,8 @@ and :do/on-error wrapping, the first-apply (no archive) case, expected-tag
 derivation against the templates' actual comment shapes, known-good
 archive manifest round-trip, retention sweep, and bundle re-runnability
 (removes precede adds). Also covers the live-tag parser (RouterOS 7's
-';;; text' comment format, ported from audit.py) and the legacy `kit:`
-prefix detection in verify_revert.
+';;; text' comment format, ported from audit.py), which reads `lankit:`
+tags only.
 """
 import json
 
@@ -66,9 +66,12 @@ def test_read_live_tags_collects_across_tables_and_ignores_non_lankit():
     assert tags == {"lankit:fw:all:default-deny", "lankit:vlan:trusted:interface"}
 
 
-def test_read_live_tags_includes_legacy_kit_prefix():
-    raw = {"filter": ' 0   ;;; kit:fw:iot:isolation\n     chain=forward\n'}
-    assert revert.read_live_tags(raw) == {"kit:fw:iot:isolation"}
+def test_read_live_tags_ignores_other_prefixes():
+    # Only lankit: is lankit's. Anything else is the operator's, and is
+    # never read, expected, or removed.
+    raw = {"filter": ' 0   ;;; manual:fw:iot:isolation\n     chain=forward\n'
+                     ' 1   ;;; lankit:fw:all:default-deny\n     chain=forward\n'}
+    assert revert.read_live_tags(raw) == {"lankit:fw:all:default-deny"}
 
 
 # ─── read_wifi_master_facts ─────────────────────────────────────────────────
@@ -487,12 +490,6 @@ def test_verify_revert_still_flags_lingering_failsafe_scheduler():
     assert "lankit:failsafe" in verdict.unexpected
 
 
-def test_verify_revert_flags_legacy_kit_prefix_as_unexpected():
-    # A revert that leaves pre-rename kit:-prefixed rows behind hasn't
-    # fully converged, even though current templates only emit lankit:.
-    verdict = revert.verify_revert(live_tags={"kit:fw:iot:isolation"}, expected_tags=set())
-    assert not verdict.ok
-    assert "kit:fw:iot:isolation" in verdict.unexpected
 
 
 # ─── expected_tags_for_config (probe.py's migration target) ─────────────────

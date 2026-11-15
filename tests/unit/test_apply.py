@@ -281,7 +281,7 @@ def test_strict_flag_is_wired_to_the_import_loop():
     import lankit.cli.commands.apply as apply_mod
 
     src = inspect.getsource(apply_mod.apply.callback)
-    assert "elif strict:" in src
+    assert "if strict:" in src
     assert "strict_tripped = True" in src
 
 
@@ -304,10 +304,8 @@ def test_globals_present_detects_the_default_deny_rule():
     assert _globals_present(_FakeConn(out=out)) is True
 
 
-def test_globals_present_accepts_pre_rename_kit_tags():
-    # A router provisioned before the kit: → lankit: rename is configured,
-    # not bare — warning it would be wrong.
-    assert _globals_present(_FakeConn(out=';;; kit:fw:all:default-deny\n')) is True
+def test_globals_present_ignores_a_foreign_prefix():
+    assert _globals_present(_FakeConn(out=';;; manual:fw:all:default-deny\n')) is False
 
 
 def test_globals_present_false_on_a_bare_firewall_table():

@@ -1,6 +1,8 @@
 import re
+import sys
 
 import click
+from lankit.core.generator import generated_dir as _generated_dir
 from lankit.cli.__main__ import cli
 
 # Shared with rollback/restore (G1.4) — classify_import_error and
@@ -12,6 +14,8 @@ from lankit.cli.commands._revert_shared import (
     build_failsafe_on_event as _build_failsafe_on_event,
     check_failsafe_fired_marker as _check_failsafe_fired_marker,
     classify_import_error as _classify_import_error,
+    import_failure as _import_failure,
+    preflight_router as _preflight_router,
     current_archive_id as _current_archive_id,
     print_verdict_evidence as _print_verdict_evidence,
 )
@@ -119,15 +123,12 @@ def _print_residue_summary(residue, log_path, console):
 
 # ── Global-rule pre-flight for --segment mode (G3.3, issue #20) ──────────────
 
-_GLOBAL_MARKER = "fw:all:default-deny"   # suffix-matched: legacy `kit:` tags count too
+_GLOBAL_MARKER = "lankit:fw:all:default-deny"
 
 
 def _globals_present(conn):
     """Is the global firewall policy live on this router? True / False /
     None when it couldn't be determined (the print itself errored).
-
-    Matched on the tag suffix rather than the full `lankit:` tag so a
-    pre-rename `kit:`-tagged router reads as configured, not as bare.
     """
     out, err = conn.run_tolerant("/ip firewall filter print detail without-paging")
     if err:
@@ -358,7 +359,7 @@ def apply(config_path, no_generate, dry_run, script, segment, skip_probe, strict
         console.print(f"[bold red]Password error:[/bold red] {e}")
         raise SystemExit(1)
 
-    generated_dir = Path("ansible/generated")
+    generated_dir = _generated_dir(cfg)
 
     # ── Step 1: Generate ─────────────────────────────────────────────────────
     if not no_generate:
@@ -413,6 +414,7 @@ def apply(config_path, no_generate, dry_run, script, segment, skip_probe, strict
             console.print(f"  Connected: [bold]{identity}[/bold]  RouterOS {version}")
 
             _check_failsafe_fired_marker(conn, console)
+            _preflight_router(conn, console, version)
 
             # ── Global-rule pre-flight (G3.3) ──────────────────────────────────
             # A --segment apply brings up that segment's VLAN, DHCP and WiFi
@@ -524,11 +526,14 @@ def apply(config_path, no_generate, dry_run, script, segment, skip_probe, strict
                 conn.upload(content, rsc.name)
                 out, err = conn.run_tolerant(f"/import file={rsc.name}")
                 import_log.append((rsc.name, out, err))
+                failure = _import_failure(out, err)
+                if failure:
+                    # 7.x reports /import halts on stdout (#66): never treat
+                    # a "Script Error:" there as success.
+                    import_error = (rsc.name, failure)
+                    break
                 if err:
-                    if _classify_import_error(err):
-                        import_error = (rsc.name, err.strip())
-                        break
-                    elif strict:
+                    if strict:
                         # --strict: the classifier's benefit of the doubt is
                         # exactly what issue #32 distrusts, so opt out of it.
                         strict_tripped = True
@@ -716,8 +721,8 @@ def _migration_bootstrap(conn, cfg, wifi_passphrases, segment, network_yml_hash,
 
     For --segment mode on an unarchived existing router, the "matches a
     full render" comparison doesn't apply (a segment-scoped apply never
-    matches a full render) — just warn and proceed with a remove-only
-    failsafe, same as any --segment apply before an archive exists.
+    matches a full render) — warn, then require the same interactive
+    confirmation as every other remove-only path.
     """
     from lankit.core import revert
     from lankit.core.generator import render_texts
@@ -734,6 +739,7 @@ def _migration_bootstrap(conn, cfg, wifi_passphrases, segment, network_yml_hash,
             "upgrade). If the failsafe fires during this segment apply, it will revert to "
             "a bare/flat state, not preserve other already-applied segments."
         )
+        _confirm_remove_only_failsafe(console)
         return None
 
     expected_now = revert.expected_tags_for_config(cfg, wifi_passphrases)
@@ -754,6 +760,14 @@ def _migration_bootstrap(conn, cfg, wifi_passphrases, segment, network_yml_hash,
             )
             console.print(f"  [green]✓[/green] Recorded current state as known-good ({aid})")
             return revert.load_known_good(cfg.router.ip, aid)
+        # Declining used to return None silently, and apply then armed a
+        # remove-only failsafe with no warning at all. Same hazard as the
+        # mismatch path below, so it gets the same gate.
+        console.print(
+            "  Not recorded. A failsafe firing during this apply could only revert to a "
+            "bare remove-only state (flat network)."
+        )
+        _confirm_remove_only_failsafe(console)
         return None
 
     console.print(
@@ -769,9 +783,31 @@ def _migration_bootstrap(conn, cfg, wifi_passphrases, segment, network_yml_hash,
     if verdict.unexpected:
         console.print(f"  Unexpected ({len(verdict.unexpected)}): live but not expected — possibly drift.")
     console.print("  Run [bold]lankit probe[/bold] first to see exactly what differs, or:")
+    _confirm_remove_only_failsafe(console)
+    return None
+
+
+def _confirm_remove_only_failsafe(console) -> None:
+    """Gate arming a failsafe whose revert would flatten the network.
+
+    Answerable only by a person at a terminal. Piped or redirected stdin is
+    refused outright, and --yes does not answer it: on 2026-11-14 a piped
+    `y` accepted this prompt against a production router, and only an
+    unrelated upload-verification failure stopped the apply from arming a
+    revert that would have dropped every VLAN. Raises SystemExit(1) unless
+    the operator explicitly agrees."""
+    from rich.prompt import Confirm
+
+    if not sys.stdin.isatty():
+        console.print(
+            "[bold red]Refusing: a remove-only failsafe needs an interactive "
+            "confirmation.[/bold red]\n"
+            "  stdin is not a terminal, so this prompt was not shown. --yes does not "
+            "answer it.\n  Run apply from a terminal, or record a known-good state first."
+        )
+        raise SystemExit(1)
     if not Confirm.ask("Continue with a remove-only failsafe for this one apply?", default=False):
         raise SystemExit(1)
-    return None
 
 
 def _revert_and_verify(conn, expected_tags, console) -> bool:
@@ -786,9 +822,10 @@ def _revert_and_verify(conn, expected_tags, console) -> bool:
     from lankit.core import revert
 
     out, err = conn.run_tolerant("/import file=lankit-revert.rsc")
-    import_clean = not _classify_import_error(err)
-    if err and not import_clean:
-        console.print(f"  [red]Import error:[/red] {err.strip()}")
+    failure = _import_failure(out, err)
+    import_clean = failure is None
+    if failure:
+        console.print(f"  [red]Import error:[/red] {failure}")
     elif err:
         console.print(f"  [yellow]Warning:[/yellow] {err.strip()}")
 

@@ -6,6 +6,7 @@ from lankit.cli.commands._revert_shared import (
     FIRED_MARKER_NAME,
     REVERT_BUNDLE_NAME,
     build_failsafe_on_event,
+    preflight_router,
 )
 
 # The sentinel is a real `lankit:`-tagged resource (design §12's G1.9
@@ -39,7 +40,9 @@ def _remove_sentinel_cmd() -> str:
 def _add_sentinel_cmd() -> str:
     return (
         f"/ip firewall filter add chain=input action=accept disabled=yes "
-        f'comment="{SENTINEL_TAG}" place-before=0'
+        f'comment="{SENTINEL_TAG}"'   # disabled, so position is irrelevant;
+        # place-before=0 depends on per-session item numbering and failed
+        # intermittently on 7.24 ("item referred by 'place-before' does not exist")
     )
 
 
@@ -172,6 +175,7 @@ def test_failsafe(config_path, seconds, full):
     console.print("[bold]Pre-flight[/bold] — clearing any leftovers from a prior run")
     try:
         with RouterConnection(cfg.router.ip, cfg.router.ssh_user, cfg.ssh_key) as conn:
+            preflight_router(conn, console)
             rule_out, _ = conn.run_tolerant(find_rule)
             if SENTINEL_TAG in rule_out:
                 conn.run_tolerant(_remove_sentinel_cmd())
@@ -261,9 +265,9 @@ def test_failsafe(config_path, seconds, full):
     reschedule_fire_at = None
     try:
         with RouterConnection(cfg.router.ip, cfg.router.ssh_user, cfg.ssh_key) as conn:
-            before, _ = conn.run_tolerant(f"{find_sched} detail")
-            m = re.search(r"start-time=(\S+)", before)
-            old_start = m.group(1) if m else None
+            # `print … where … detail` is a syntax error on 7.x, reported on
+            # stdout, so the old regex never matched; read the field exactly.
+            old_start = conn.scheduler_field(scheduler, "start-time")
             if not old_start:
                 conn.cancel_failsafe_scheduler(scheduler)
                 console.print("[bold red]✗ FAIL[/bold red] — could not read initial start-time.")
@@ -281,9 +285,9 @@ def test_failsafe(config_path, seconds, full):
             reschedule_fire_at = time.time() + seconds
             console.print("  ✓ reschedule_scheduler returned True")
 
-            after, _ = conn.run_tolerant(f"{find_sched} detail")
-            m = re.search(r"start-time=(\S+)", after)
-            new_start = m.group(1) if m else None
+            # `print … where … detail` is a syntax error on 7.x, reported on
+            # stdout, so the old regex never matched; read the field exactly.
+            new_start = conn.scheduler_field(scheduler, "start-time")
             if new_start == old_start:
                 conn.cancel_failsafe_scheduler(scheduler)
                 console.print(

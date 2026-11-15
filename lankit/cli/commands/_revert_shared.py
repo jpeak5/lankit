@@ -100,6 +100,53 @@ def classify_import_error(err: str) -> bool:
     return is_error and not is_info
 
 
+def import_failure(out: str, err: str) -> Optional[str]:
+    """The error text if a RouterOS `/import` failed, else None.
+
+    RouterOS 7.x reports import failures on *stdout* over SSH exec, with
+    stderr empty: `Script Error: failure: already have such address
+    (/ip/address/add; line 13) (:import; line 1)`. Only checking stderr made
+    every failed import look like a success (#66). `Script Error:` is the
+    prefix RouterOS uses for every /import halt, and is never informational,
+    so it is fatal on its own; stderr keeps the existing classifier. Pure."""
+    for line in (out or "").splitlines():
+        if "script error:" in line.lower():
+            return line.strip()
+    if classify_import_error(err):
+        return err.strip()
+    return None
+
+
+MIN_ROUTEROS = (7, 21)
+
+
+def parse_routeros_version(text: str) -> Optional[tuple[int, int]]:
+    """(major, minor) from `RouterConnection.version()` output such as
+    `7.24.2 (stable)`, or None if it can't be read. Pure."""
+    import re
+    m = re.match(r"\s*(\d+)\.(\d+)", text or "")
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def preflight_router(conn, console, version: Optional[str] = None) -> None:
+    """Refuse routers lankit can't safely change. Call right after connecting,
+    before touching anything. Raises SystemExit(1).
+
+    - RouterOS older than 7.21, or unreadable: the templates rely on 7.21
+      defaults (fasttrack hw-offload, #63) and 7.x output formats.
+    """
+    ver_text = version if version is not None else conn.version()
+    ver = parse_routeros_version(ver_text)
+    if ver is None or ver < MIN_ROUTEROS:
+        console.print(
+            f"[bold red]Refusing: RouterOS {ver_text or 'unknown'} is not supported.[/bold red]\n"
+            f"  lankit needs RouterOS {MIN_ROUTEROS[0]}.{MIN_ROUTEROS[1]} or newer. "
+            "Upgrade the router first."
+        )
+        raise SystemExit(1)
+
+
+
 def check_failsafe_fired_marker(conn, console) -> None:
     """Durable, log-rotation-independent signal that a failsafe fired since
     the last successful 'keep'. Checked on every connect, before touching
@@ -267,9 +314,10 @@ def import_revert_bundle_and_verify(conn, expected_tags, console) -> tuple[bool,
     from lankit.core import revert
 
     out, err = conn.run_tolerant(f"/import file={REVERT_BUNDLE_NAME}")
-    import_clean = not classify_import_error(err)
-    if err and not import_clean:
-        console.print(f"  [red]Import error:[/red] {err.strip()}")
+    failure = import_failure(out, err)
+    import_clean = failure is None
+    if failure:
+        console.print(f"  [red]Import error:[/red] {failure}")
     elif err:
         console.print(f"  [yellow]Warning:[/yellow] {err.strip()}")
 
@@ -297,12 +345,6 @@ def print_verdict_evidence(verdict: "RevertVerdict", console) -> None:
             console.print(f"    [red]✗[/red] {t}")
         if len(verdict.unexpected) > len(shown):
             console.print(f"    ... and {len(verdict.unexpected) - len(shown)} more")
-        if any(t.startswith("kit:") for t in verdict.unexpected):
-            console.print(
-                "  [dim]Tags with a 'kit:' prefix are pre-rename legacy tags (issue #43) — "
-                "the remove-pass only matches 'lankit:', so they need a one-time manual "
-                "cleanup on the router.[/dim]"
-            )
 
 
 def prompt_unpaired_snapshot_path(target_path: Path, status: str, cfg, console) -> str:
@@ -384,6 +426,7 @@ def execute_revert_operation(
     try:
         with RouterConnection(cfg.router.ip, cfg.router.ssh_user, cfg.ssh_key) as conn:
             check_failsafe_fired_marker(conn, console)
+            preflight_router(conn, console)
 
             # Save the current state first, paired to the archive that is
             # current right now (design §8) — so this operation itself can

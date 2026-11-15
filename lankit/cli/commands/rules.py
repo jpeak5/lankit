@@ -1,4 +1,5 @@
 import click
+from lankit.core.generator import generated_dir as _generated_dir
 from lankit.cli.__main__ import cli
 
 
@@ -31,8 +32,14 @@ def rules(config_path, segment, unit):
     console = Console()
 
     # Pre-flight: this command reads generated scripts, so check for them
-    # before printing anything else
-    generated_dir = Path("ansible/generated")
+    # before printing anything else. They live beside the site's network.yml;
+    # with no loadable config, fall back to the current directory.
+    try:
+        from lankit.core.config import load as _load
+        _cfg = _load(Path(config_path) if config_path else None)
+        generated_dir = _generated_dir(_cfg)
+    except Exception:
+        generated_dir = Path("ansible/generated")
     rsc_files = sorted(generated_dir.glob("*.rsc")) if generated_dir.exists() else []
     if not rsc_files:
         console.print(f"[yellow]No generated scripts found in {generated_dir}/.[/yellow]")

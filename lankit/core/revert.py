@@ -51,7 +51,7 @@ from lankit.core.config import Config
 # below — because we control that format exactly.
 
 _FIELD_RE = re.compile(r'([\w.-]+)=(?:"([^"]*)"|([\S]+))')
-_LANKIT_TAG_RE = re.compile(r'^(?:lankit|kit):')
+_LANKIT_TAG_RE = re.compile(r'^lankit:')
 
 
 def _fields(text: str) -> dict[str, str]:
@@ -564,10 +564,9 @@ def verify_revert(live_tags: set[str], expected_tags: set[str]) -> RevertVerdict
     """Pure comparison — no I/O. Callers collect live_tags via
     read_live_tags() over their own connection.
 
-    unexpected treats legacy `kit:`-prefixed tags (pre-rename, issue #43)
-    as unexpected too — a revert that leaves old-format tags behind hasn't
-    fully converged, even though the current templates only ever emit
-    `lankit:`.
+    Only `lankit:` tags exist as far as this comparison is concerned:
+    objects with any other comment are not lankit's and are never expected,
+    removed, or reported.
 
     One deliberate exclusion: the durable failsafe-fired marker
     (`lankit:failsafe-fired:*`, a disabled scheduler entry) is ignored.

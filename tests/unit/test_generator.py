@@ -7,6 +7,7 @@ scoping (global vs segment_filter), client_isolation / force_dns
 conditionals, and placeholder passphrase behaviour.
 """
 import pytest
+from pathlib import Path
 
 from lankit.core.config import load
 from lankit.core.generator import generate_all, generate_one
@@ -261,3 +262,71 @@ def test_render_texts_matches_generate_all_output(cfg):
     texts = render_texts(cfg)
     assert set(texts) == set(EXPECTED_FILES)
     assert 'comment="lankit:vlan:trusted:interface"' in texts["01-vlans.rsc"]
+
+
+# ── #62 / #63 ────────────────────────────────────────────────────────────────
+
+def test_no_hw_offload_parameter_anywhere(cfg, tmp_path):
+    for name, text in render(cfg, tmp_path).items():
+        assert "hw-offload" not in "\n".join(
+            l for l in text.splitlines() if not l.lstrip().startswith("#")), name
+
+
+def _wifi_masters(text):
+    return [l.split()[1] for l in text.splitlines() if l.startswith("set wifi")]
+
+
+def test_master_radios_set_for_every_band_in_use(cfg, tmp_path):
+    # the minimal fixture uses both bands
+    assert _wifi_masters(render(cfg, tmp_path)["04-wifi.rsc"]) == ["wifi1", "wifi2"]
+
+
+def test_no_master_radio_block_when_no_segment_uses_wifi(minimal_yml, mutated, tmp_path):
+    from lankit.core.config import load
+
+    def wired_only(raw):
+        for seg in raw["segments"].values():
+            seg["wifi_bands"], seg["ssid"] = [], None
+    text = render(load(mutated(minimal_yml, wired_only)), tmp_path)["04-wifi.rsc"]
+    assert _wifi_masters(text) == []
+    assert "/interface wifi\n" not in text
+
+
+def test_only_the_used_band_master_is_set(minimal_yml, mutated, tmp_path):
+    from lankit.core.config import load
+
+    def two_gig_only(raw):
+        for seg in raw["segments"].values():
+            if seg["wifi_bands"]:
+                seg["wifi_bands"] = ["2ghz"]
+    text = render(load(mutated(minimal_yml, two_gig_only)), tmp_path)["04-wifi.rsc"]
+    assert _wifi_masters(text) == ["wifi2"]
+
+
+# ── output location and permissions ──────────────────────────────────────────
+
+def test_generated_dir_is_beside_the_site_config_not_the_tool(minimal_yml, mutated):
+    from lankit.core.config import load
+    from lankit.core.generator import generated_dir
+    site_yml = mutated(minimal_yml, lambda raw: None)        # a copy in tmp_path
+    cfg = load(site_yml)
+    assert generated_dir(cfg) == site_yml.parent.resolve() / "ansible" / "generated"
+    tool_root = Path(__file__).resolve().parents[2]
+    assert tool_root not in generated_dir(cfg).parents
+
+
+def test_generated_scripts_are_owner_only(cfg, tmp_path):
+    from lankit.core.generator import generate_all
+    out = tmp_path / "gen"
+    paths = generate_all(cfg, out)
+    assert oct(out.stat().st_mode & 0o777) == oct(0o700)
+    for p in paths:
+        assert oct(p.stat().st_mode & 0o777) == oct(0o600), p.name
+
+
+def test_filtered_segments_offer_only_the_filtering_resolver(cfg, tmp_path):
+    text = render(cfg, tmp_path)["02-dhcp.rsc"]
+    offers = [l.strip() for l in text.splitlines() if l.strip().startswith("dns-server=")]
+    assert offers, "expected DHCP networks with dns-server"
+    filtered = [o for o in offers if "1.1.1.1" not in o]
+    assert filtered and all(o == f"dns-server={cfg.dns_ip} \\" for o in filtered), filtered

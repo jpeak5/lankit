@@ -50,9 +50,13 @@ add name=dhcp-{{ name }} \
 {% for name, seg in segments.items() %}
 /ip dhcp-server network
 {% if seg.dns == 'filtered' %}
+{# Filtered segments get the filtering resolver only. A second entry (the
+   router, or a public resolver) is not a failover: clients query servers in
+   parallel or rotate between them, so it is a routine unfiltered path.
+   Resolver availability belongs router-side instead (#69, not built yet). #}
 add address={{ seg.subnet }} \
     gateway={{ seg.gateway }} \
-    dns-server={{ dns_server_ip }},{{ seg.gateway }} \
+    dns-server={{ dns_server_ip }} \
     comment="lankit:dhcp:{{ name }}:network"
 {% elif seg.dns == 'unfiltered' %}
 add address={{ seg.subnet }} \

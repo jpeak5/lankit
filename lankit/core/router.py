@@ -9,6 +9,7 @@ Used by apply, commit, rollback, discover, and test-failsafe commands.
 from __future__ import annotations
 
 import errno
+import re
 import socket
 import time
 from pathlib import Path
@@ -23,6 +24,74 @@ if TYPE_CHECKING:
 class RouterError(Exception):
     """Raised when a router operation fails."""
     pass
+
+
+def parse_exact_file_size(out: str, err: str) -> Optional[int]:
+    """Parse the output of `:put [/file get [find name=...] size]`.
+
+    Only a bare integer counts. RouterOS reports a missing file as
+    `no such item (/file/get; line 1)` on *stdout* with stderr empty
+    (observed on 7.24.2), so anything other than digits is a failure —
+    never a size. Pure; no I/O."""
+    if err.strip():
+        return None
+    text = out.strip()
+    return int(text) if text.isdigit() else None
+
+
+_ROUTEROS_ERROR = re.compile(r"\(/[^\s;()]+; line \d+\)|^\s*Script Error:")
+
+
+def routeros_stdout_error(out: str) -> Optional[str]:
+    """The first RouterOS error line in stdout, or None.
+
+    RouterOS 7.x reports runtime errors on stdout over SSH exec, ending in
+    the menu path and line, e.g. `no such item (/system/scheduler/get; line 1)`
+    or `item referred by 'place-before' does not exist (11)
+    (/ip/firewall/filter/add; line 1)`, and `/import` halts start with
+    `Script Error:`. Pure."""
+    for line in (out or "").splitlines():
+        if _ROUTEROS_ERROR.search(line):
+            return line.strip()
+    return None
+
+
+_MONTHS = ("jan", "feb", "mar", "apr", "may", "jun",
+           "jul", "aug", "sep", "oct", "nov", "dec")
+
+
+def compute_fire_time(clock_output: str, seconds: int) -> tuple[str, str]:
+    """(start-date, start-time) `seconds` after the time in `/system clock print`.
+
+    Accepts both date formats RouterOS has printed: ISO `2026-11-15` (7.10+)
+    and legacy `nov/15/2026`. The start-date is emitted in the same format the
+    router printed. Raises RouterError when either the date or the time can't
+    be parsed: the old fallback to year 2000 was the *only* path on 7.x (#61)
+    and depended on undocumented scheduler behaviour for past start dates.
+    Pure; no I/O."""
+    import re
+    from datetime import datetime, timedelta
+
+    time_m = re.search(r'time:\s*(\d{1,2}):(\d{2}):(\d{2})', clock_output)
+    iso_m = re.search(r'date:\s*(\d{4})-(\d{2})-(\d{2})', clock_output)
+    old_m = re.search(r'date:\s*([a-z]{3})/(\d{1,2})/(\d{4})', clock_output, re.I)
+    if not time_m or not (iso_m or old_m):
+        raise RouterError(f"Could not parse router clock output: {clock_output!r}")
+    hh, mm, ss = (int(g) for g in time_m.groups())
+    if iso_m:
+        y, mo, d = (int(g) for g in iso_m.groups())
+    else:
+        mon = old_m.group(1).lower()
+        if mon not in _MONTHS:
+            raise RouterError(f"Unrecognised month in router clock output: {clock_output!r}")
+        y, mo, d = int(old_m.group(3)), _MONTHS.index(mon) + 1, int(old_m.group(2))
+
+    fire = datetime(y, mo, d, hh, mm, ss) + timedelta(seconds=seconds)
+    if iso_m:
+        start_date = fire.strftime("%Y-%m-%d")
+    else:
+        start_date = f"{_MONTHS[fire.month - 1]}/{fire.day:02d}/{fire.year}"
+    return start_date, fire.strftime("%H:%M:%S")
 
 
 class RouterConnection:
@@ -104,7 +173,9 @@ class RouterConnection:
             self._client = None
 
     def run(self, command: str, timeout: int = 30) -> str:
-        """Run a command, return stdout. Raises RouterError on non-empty stderr."""
+        """Run a command, return stdout. Raises RouterError on non-empty
+        stderr, or on a RouterOS error on stdout (where 7.x reports them over
+        SSH exec, with stderr empty and exit status 0)."""
         if not self._client:
             raise RouterError("Not connected")
         stdin, stdout, stderr = self._client.exec_command(command, timeout=timeout)
@@ -112,6 +183,9 @@ class RouterConnection:
         err = stderr.read().decode(errors="replace").strip()
         if err:
             raise RouterError(f"Command error: {err}")
+        stdout_error = routeros_stdout_error(out)
+        if stdout_error:
+            raise RouterError(f"Command error: {stdout_error}")
         return out
 
     def run_tolerant(self, command: str, timeout: int = 30) -> tuple[str, str]:
@@ -141,36 +215,7 @@ class RouterConnection:
         Parses both date and time so midnight (and month/year) boundaries advance
         correctly. Raises RouterError if the clock cannot be parsed.
         """
-        import re
-        from datetime import datetime, timedelta
-
-        raw = self.run("/system clock print")
-        date_m = re.search(r'date:\s*(\w{3})/(\d{1,2})/(\d{4})', raw)
-        time_m = re.search(r'time:\s*(\d{1,2}):(\d{2}):(\d{2})', raw)
-        if not time_m:
-            raise RouterError(f"Could not parse router clock output: {raw!r}")
-
-        _months = {
-            "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
-        }
-        if date_m:
-            month = _months.get(date_m.group(1).lower(), 1)
-            now_dt = datetime(
-                int(date_m.group(3)), month, int(date_m.group(2)),
-                int(time_m.group(1)), int(time_m.group(2)), int(time_m.group(3)),
-            )
-        else:
-            # Date unavailable — fall back to year 2000 (midnight boundary still
-            # handled correctly within the same day; next-day case is edge-only)
-            now_dt = datetime(2000, 1, 1,
-                              int(time_m.group(1)), int(time_m.group(2)), int(time_m.group(3)))
-
-        fire_dt = now_dt + timedelta(seconds=seconds)
-        _months_rev = {v: k for k, v in _months.items()}
-        start_date = f"{_months_rev[fire_dt.month]}/{fire_dt.day:02d}/{fire_dt.year}"
-        start_time = fire_dt.strftime("%H:%M:%S")
-        return start_date, start_time
+        return compute_fire_time(self.run("/system clock print"), seconds)
 
     def add_failsafe_scheduler(self, name: str, revert_cmd: str, seconds: int) -> None:
         """Install a one-shot RouterOS scheduler job that reverts in `seconds`.
@@ -191,6 +236,15 @@ class RouterConnection:
             f'start-date={start_date} start-time={start_time} interval=1d '
             f'on-event={{{revert_cmd}}} comment="lankit:failsafe"'
         )
+        # Never report armed without proof: 7.x errors don't reach stderr,
+        # so read the installed fire time back exactly.
+        got = (self.scheduler_field(name, "start-date"),
+               self.scheduler_field(name, "start-time"))
+        if got != (start_date, start_time):
+            raise RouterError(
+                f"Failsafe scheduler not confirmed: expected {start_date} {start_time}, "
+                f"router shows {got[0]} {got[1]}"
+            )
 
     def reschedule_scheduler(self, name: str, seconds: int) -> bool:
         """Push a named scheduler's fire time to `seconds` from now, in place.
@@ -212,10 +266,23 @@ class RouterConnection:
             f'/system scheduler set [find name="{name}"] '
             f'start-date={start_date} start-time={start_time}'
         )
-        verify, _ = self.run_tolerant(
-            f'/system scheduler print where name="{name}"'
+        # Read back exact values with `get`: on 7.x `print` is a column table
+        # with no `start-time=` text, so the old check always failed (#65).
+        return (self.scheduler_field(name, "start-time") == start_time
+                and self.scheduler_field(name, "start-date") == start_date)
+
+    def scheduler_field(self, name: str, field: str) -> Optional[str]:
+        """Exact value of one field of a named scheduler, via `get`, or None
+        if the scheduler is absent. Never parses `print` output (#65): on
+        7.x an absent item reports `no such item` on stdout, which is not a
+        value."""
+        out, err = self.run_tolerant(
+            f':put [/system scheduler get [find name="{name}"] {field}]'
         )
-        return f"start-time={start_time}" in verify
+        value = out.strip()
+        if err.strip() or not value or "no such item" in value:
+            return None
+        return value
 
     def cancel_failsafe_scheduler(self, name: str) -> bool:
         """Disarm the failsafe scheduler. Returns True if confirmed gone.
@@ -265,15 +332,17 @@ class RouterConnection:
         """Confirm a file landed on the router with exactly the expected
         byte size before anything depends on it being complete — most
         importantly, the failsafe scheduler must never be armed against a
-        partially-uploaded revert bundle (design §6)."""
-        import re
-        out, err = self.run_tolerant(f'/file print detail where name="{remote_path}"')
-        if err or remote_path not in out:
-            return False
-        m = re.search(r'size=(\d+)', out)
-        if not m:
-            return False
-        return int(m.group(1)) == expected_size
+        partially-uploaded revert bundle (design §6).
+
+        Reads the size with `/file get`, which returns an exact byte count.
+        `/file print` cannot be used: RouterOS humanises the size there
+        (`size=77.6KiB` for 79442 bytes on 7.24.2, and in the SIZE column on
+        6.49), so a `size=(\\d+)` parse read 77 and rejected every bundle
+        over 1 KiB — the failsafe could never arm."""
+        out, err = self.run_tolerant(
+            f':put [/file get [find name="{remote_path}"] size]'
+        )
+        return parse_exact_file_size(out, err) == expected_size
 
     def identity(self) -> str:
         """Return the router system identity."""

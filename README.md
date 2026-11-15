@@ -28,7 +28,12 @@ lankit is a configuration toolkit for the MikroTik hAP ax³ that generates Route
 ## Requirements
 
 - Python 3.11+
-- MikroTik router (tested on hAP ax³) with SSH access enabled
+- MikroTik router on **RouterOS 7.21 or newer** (lankit refuses older versions), with SSH access
+  enabled. Tested on the hAP ax³.
+  - **WiFi:** `04-wifi.rsc` supports routers using the `/interface wifi` driver with radios named
+    `wifi1` (5 GHz) and `wifi2` (2.4 GHz), as on the hAP ax³. Wired-only configs work on any
+    router (no radio settings are emitted). Other radio layouts (single radio, the older
+    `wireless` driver, CAPsMAN) are not supported yet: see #62 and #64.
 - Raspberry Pi running Raspberry Pi OS, connected to the router via ethernet
   (hosts Pi-hole + Unbound). Without one, set `dns_ip: "1.1.1.1"` in
   `network.yml` and skip `lankit provision` — the router config still works.
@@ -76,7 +81,7 @@ Then:
 ```bash
 lankit overview                    # verify config parsed correctly
 lankit generate                    # render RouterOS scripts
-cat ansible/generated/*.rsc        # read exactly what will run on the router
+cat ansible/generated/*.rsc        # beside network.yml: exactly what will run on the router
 lankit diagram --view              # visual sanity check
 lankit rollback-card               # print and keep near router
 lankit apply --dry-run             # confirm SSH works
@@ -129,7 +134,7 @@ lankit/
 │       ├── dns-server/      # Pi-hole + Unbound role
 │       ├── caddy/           # Caddy web server (app_server host)
 │       └── portal/          # portal placeholder pages
-└── ansible/generated/       # rendered .rsc scripts (git-ignored)
+└── ansible/generated/       # not used: scripts render beside your network.yml (0600)
 ```
 
 ## License

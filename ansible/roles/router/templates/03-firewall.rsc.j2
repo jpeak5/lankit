@@ -142,11 +142,13 @@ add chain=forward \
 # disabled in place; the revert bundle re-enables it. The find-guard makes
 # this a no-op when the rule is absent or already disabled.
 disable [find where comment="defconf: fasttrack" && disabled=no]
+# No hw-offload parameter: it has been the default since RouterOS 7.21 (the
+# minimum lankit accepts), and 7.24 rejects it as a bad parameter on routers
+# without a switch chip (CHR, x86), which would halt the import here (#63).
 add chain=forward \
     action=fasttrack-connection \
     connection-state=established,related \
     connection-mark=internet-traffic \
-    hw-offload=yes \
     comment="lankit:fw:all:fasttrack-internet"
 
 # ── NAT masquerade ───────────────────────────────────────────────────────────

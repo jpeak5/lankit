@@ -247,17 +247,6 @@ def test_evidence_truncates_long_lists(console):
     assert "and 5 more" in text
 
 
-def test_evidence_notes_legacy_kit_tags(console):
-    verdict = RevertVerdict(
-        missing=frozenset(),
-        unexpected=frozenset({"kit:fw:iot:isolation"}),
-    )
-    shared.print_verdict_evidence(verdict, console)
-    text = _console_text(console)
-    assert "pre-rename legacy tags" in text
-    assert "manual" in text
-
-
 def test_evidence_silent_on_ok_verdict(console):
     shared.print_verdict_evidence(RevertVerdict(frozenset(), frozenset()), console)
     assert _console_text(console) == ""

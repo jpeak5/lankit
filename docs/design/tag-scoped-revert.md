@@ -212,9 +212,19 @@ Snapshots without a pairing (see §9) get an honest refusal path, not a silent d
 - **Existing snapshots in `~/.lankit/snapshots/` remain valid for:** (1) the factory-reset additive-import path on the rollback card (the one case where import-over-config works, because the config is near-empty), and (2) human inspection/diffing. **They are not usable as tag-scoped rebuild payloads** — no reliable tag filtering (§3, reasons 1–3) and no sensitive values. When rollback/restore selects an unpaired snapshot, the command says exactly that and offers: (a) remove-pass-only revert (converge to defconf + manual state — flat network stays up), or (b) the factory-reset + additive-import instructions. It never pretends a tag-scoped restore happened.
 - **Existing lankit-provisioned routers have live lankit state but no archive.** The first post-upgrade `apply` must not silently arm a remove-only failsafe (a fire would drop every segment back to flat .88 — survivable but a nasty surprise). G1.3 therefore adds a **bootstrap step**: if no archive exists but live `^lankit:` tags are found, run the registry tag-audit; if live state matches the full render of the current `network.yml`, offer "Record current state as known-good? [y/N]" and write the archive before proceeding. If it does not match, refuse to proceed until the user either runs a full apply eyes-open (which creates the archive on keep) or explicitly acknowledges a remove-only failsafe for this one apply.
 
+### 9.1 Only `lankit:` tags are lankit's
+
+Detection, verification and every remove-pass match `^lankit:` and nothing else. An object with any
+other comment, or none, belongs to the operator: lankit never expects it, removes it, or reports it.
+The consequence to know about: a router carrying config that *collides* with what lankit adds (an
+existing VLAN interface, pool or address with the same name) but not tagged `lankit:` looks bare to
+lankit. Its first apply fails on the collision, is caught (#66), and is reverted remove-only. See
+#70 for the pre-check that would catch this before arming.
+
 ## 10. RouterOS version assumptions
 
-- **RouterOS 7.x; tested device hAP ax³.** Specifically assumed: `/interface wifi` menu naming (7.13+ wifi package — matches the existing templates, not new); `find where comment~"^..."` regex matching (already relied on by every template); `:foreach`/`:do on-error` scripting; scheduler `on-event` inline scripts with self-removal (already proven by `test-failsafe`); dynamic bridge-VLAN entries from PVIDs (documented; hardware-verified in G1.13); `/import` additive, halt-on-first-error, file retained after import; flash-root files persist across reboot on this device.
+- **RouterOS 7.21 or newer, enforced.** `preflight_router` refuses older or unreadable versions (the templates rely on 7.21's fasttrack `hw-offload` default, #63). 7.x reports command and `/import` errors on **stdout** over SSH exec, with stderr empty and exit status 0 (except a failed `/import`, which exits 1); `RouterConnection.run` and the import classifier treat a `(/menu/path; line N)` suffix or a `Script Error:` line as a failure (#58, #65, #66). Values are read with `get`, never parsed from humanised `print` output.
+- **Tested device hAP ax³; drilled on CHR 7.24.2.** Specifically assumed: `/interface wifi` menu naming (7.13+ wifi package — matches the existing templates, not new); `find where comment~"^..."` regex matching (already relied on by every template); `:foreach`/`:do on-error` scripting; scheduler `on-event` inline scripts with self-removal (already proven by `test-failsafe`); dynamic bridge-VLAN entries from PVIDs (documented; hardware-verified in G1.13); `/import` additive, halt-on-first-error, file retained after import; flash-root files persist across reboot on this device.
 - Not assumed: `/export` output format stability (deliberately — the design avoids parsing exports at all), RouterOS safe-mode, `/system reset-configuration` (explicitly deferred).
 
 ## 11. Rejected alternatives

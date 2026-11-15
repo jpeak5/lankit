@@ -4,7 +4,7 @@ lankit.core.generator
 
 Renders Jinja2 templates into RouterOS .rsc scripts.
 Templates live in ansible/roles/router/templates/.
-Output goes to ansible/generated/.
+Output goes to ansible/generated/ beside the site's network.yml.
 """
 
 from __future__ import annotations
@@ -18,7 +18,24 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from lankit.core.config import Config
 
 _TEMPLATES_DIR = Path(__file__).parent.parent.parent / "ansible" / "roles" / "router" / "templates"
-_OUTPUT_DIR = Path(__file__).parent.parent.parent / "ansible" / "generated"
+def generated_dir(cfg: Config) -> Path:
+    """Where generated scripts go: `ansible/generated/` beside the site's
+    network.yml. Never inside the lankit install: generated scripts carry
+    plaintext WiFi passphrases (04-wifi.rsc), and a default pointing at the
+    tool's own tree once left a household's keys in the tool's checkout."""
+    return (cfg.config_dir or Path.cwd()) / "ansible" / "generated"
+
+
+def _write_private(path: Path, text: str) -> None:
+    """Write a generated script readable by the owner only (0600)."""
+    path.write_text(text)
+    path.chmod(0o600)
+
+
+def _private_dir(out: Path) -> Path:
+    out.mkdir(parents=True, exist_ok=True)
+    out.chmod(0o700)
+    return out
 
 _TEMPLATES = [
     "01-vlans.rsc.j2",
@@ -81,14 +98,13 @@ def generate_all(
     include_globals=False unless overridden), an iterable of segment names
     (new — requires an explicit include_globals), or None for all segments.
     """
-    out = output_dir or _OUTPUT_DIR
-    out.mkdir(parents=True, exist_ok=True)
+    out = _private_dir(output_dir or generated_dir(cfg))
 
     texts = render_texts(cfg, wifi_passphrases, segment_filter, include_globals)
     outputs = []
     for output_name, text in texts.items():
         output_path = out / output_name
-        output_path.write_text(text)
+        _write_private(output_path, text)
         outputs.append(output_path)
     return outputs
 
@@ -102,8 +118,7 @@ def generate_one(
     include_globals: Optional[bool] = None,
 ) -> Path:
     """Render a single template by name (e.g. '03-firewall.rsc.j2')."""
-    out = output_dir or _OUTPUT_DIR
-    out.mkdir(parents=True, exist_ok=True)
+    out = _private_dir(output_dir or generated_dir(cfg))
 
     if not template_name.endswith(".j2"):
         template_name += ".j2"
@@ -114,7 +129,7 @@ def generate_one(
     )
     output_name = template_name.removesuffix(".j2")
     output_path = out / output_name
-    output_path.write_text(texts[output_name])
+    _write_private(output_path, texts[output_name])
     return output_path
 
 
