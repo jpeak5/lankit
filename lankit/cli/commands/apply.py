@@ -415,6 +415,7 @@ def apply(config_path, no_generate, dry_run, script, segment, skip_probe, strict
 
             _check_failsafe_fired_marker(conn, console)
             _preflight_router(conn, console, version)
+            _check_untagged(conn, [s.read_text() for s in scripts], console)
 
             # ── Global-rule pre-flight (G3.3) ──────────────────────────────────
             # A --segment apply brings up that segment's VLAN, DHCP and WiFi
@@ -785,6 +786,37 @@ def _migration_bootstrap(conn, cfg, wifi_passphrases, segment, network_yml_hash,
     console.print("  Run [bold]lankit probe[/bold] first to see exactly what differs, or:")
     _confirm_remove_only_failsafe(console)
     return None
+
+
+def _check_untagged(conn, script_texts, console) -> None:
+    """Report config lankit doesn't own; refuse if any of it would collide
+    with an add in this apply (#70).
+
+    An untagged object survives every remove-pass, so an add with the same
+    identity fails mid-import ("already have such ..."), and the failsafe's
+    revert then runs against a half-applied router. Caught here, before the
+    snapshot, bundle or failsafe, refusing changes nothing.
+    """
+    from lankit.core import untagged
+
+    found = untagged.find_untagged(conn.read_tag_tables())
+    if not found:
+        return
+    collisions = untagged.find_collisions(found, script_texts)
+    if collisions:
+        console.print()
+        console.print("[bold red]Refusing to apply:[/bold red] the router has config lankit "
+                      "didn't make that clashes with what this apply adds:")
+        for u in collisions:
+            console.print(f"  [bold]{u.path}[/bold]  {u.label}"
+                          + (f"  [dim];;; {u.comment}[/dim]" if u.comment else ""))
+        console.print("  lankit only removes objects tagged [bold]lankit:[/bold], so these would "
+                      "make the import fail partway.")
+        console.print("  Remove or rename them on the router, then run apply again. "
+                      "Nothing has been changed.")
+        raise SystemExit(1)
+    console.print(f"  [yellow]![/yellow] {len(found)} object(s) on the router aren't managed "
+                  "by lankit; no clash with this apply. [dim]lankit audit lists them.[/dim]")
 
 
 def _confirm_remove_only_failsafe(console) -> None:

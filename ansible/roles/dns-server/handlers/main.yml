@@ -13,3 +13,7 @@
   systemd:
     name: dhcpcd
     state: restarted
+
+- name: reload systemd
+  systemd:
+    daemon_reload: true

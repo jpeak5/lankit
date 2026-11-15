@@ -165,3 +165,125 @@
         pihole --regex
         'mask(-h2|-canary)?\.icloud\.com'
       notify: restart pihole-ftl
+
+# ── Headless ──────────────────────────────────────────────────────────────────
+# The DNS server is a dedicated appliance. A desktop session (Xorg, LXDE,
+# lightdm) costs ~40 MB of RAM on a 1 GB Pi and pushes DNS into swap.
+# Boot to console instead. No-op on Lite images where lightdm is absent.
+# Opt out with lankit_dns_headless: false (defaults/main.yml).
+
+- name: Headless — boot to console, not the desktop
+  tags: [headless]
+  when: lankit_dns_headless | bool
+  block:
+    - name: Check whether a display manager is installed
+      stat:
+        path: /lib/systemd/system/lightdm.service
+      register: lightdm_unit
+
+    - name: Read the default boot target
+      command: systemctl get-default
+      register: default_target
+      changed_when: false
+
+    - name: Set default boot target to multi-user (console)
+      command: systemctl set-default multi-user.target
+      when: default_target.stdout != 'multi-user.target'
+
+    - name: Stop and disable lightdm
+      when: lightdm_unit.stat.exists
+      systemd:
+        name: lightdm
+        enabled: false
+        state: stopped
+
+# ── DNS watchdog ──────────────────────────────────────────────────────────────
+# FTL can hang while systemd still reports it active (2026-07-20), which no
+# restart policy catches. A timer probes it every minute and restarts it after
+# three failed probes, at most once per ten minutes. Logs to the journal:
+#   journalctl -t lankit-dns-watchdog
+# Opt out with lankit_dns_watchdog: false (defaults/main.yml).
+
+- name: DNS watchdog — restart pihole-FTL when it stops answering
+  tags: [watchdog]
+  block:
+    - name: Install dig for the watchdog probe
+      apt:
+        name: bind9-dnsutils
+        state: present
+
+    - name: Install the watchdog script
+      copy:
+        src: lankit-dns-watchdog.sh
+        dest: /usr/local/sbin/lankit-dns-watchdog
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the watchdog service
+      copy:
+        dest: /etc/systemd/system/lankit-dns-watchdog.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Installed by lankit's dns-server role.
+          [Unit]
+          Description=lankit DNS watchdog (restart a hung pihole-FTL)
+          After=pihole-FTL.service
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/lankit-dns-watchdog
+      notify: reload systemd
+
+    - name: Install the watchdog timer
+      copy:
+        dest: /etc/systemd/system/lankit-dns-watchdog.timer
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # Installed by lankit's dns-server role.
+          [Unit]
+          Description=Run the lankit DNS watchdog every minute
+
+          [Timer]
+          OnBootSec=3min
+          OnUnitActiveSec=1min
+          AccuracySec=10s
+
+          [Install]
+          WantedBy=timers.target
+      notify: reload systemd
+
+    - name: Flush handlers so systemd sees the new units
+      meta: flush_handlers
+
+    - name: Enable and start the watchdog timer
+      systemd:
+        name: lankit-dns-watchdog.timer
+        enabled: true
+        state: started
+  when: lankit_dns_watchdog | bool
+
+- name: DNS watchdog — removed when opted out
+  tags: [watchdog]
+  when: not (lankit_dns_watchdog | bool)
+  block:
+    - name: Stop and disable the watchdog timer
+      systemd:
+        name: lankit-dns-watchdog.timer
+        enabled: false
+        state: stopped
+      failed_when: false
+
+    - name: Remove the watchdog files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/lankit-dns-watchdog.timer
+        - /etc/systemd/system/lankit-dns-watchdog.service
+        - /usr/local/sbin/lankit-dns-watchdog
+      notify: reload systemd

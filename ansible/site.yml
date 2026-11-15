@@ -16,6 +16,10 @@
 #   lankit_portals            — dict of portal name → enabled bool (e.g. {me: true, registration: true})
 #   lankit_app_server_ip      — app server host IP (empty string if not configured)
 #   household_name            — from network.yml, used in portal page titles
+#
+# Role defaults (override with --extra-vars):
+#   lankit_dns_headless       — boot the DNS server to console, no desktop (default true)
+#   lankit_dns_watchdog       — restart pihole-FTL when it stops answering (default true)
 
 - name: Provision DNS server (Pi-hole + Unbound)
   hosts: dns_server

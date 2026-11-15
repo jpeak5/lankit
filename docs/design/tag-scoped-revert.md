@@ -214,12 +214,24 @@ Snapshots without a pairing (see §9) get an honest refusal path, not a silent d
 
 ### 9.1 Only `lankit:` tags are lankit's
 
-Detection, verification and every remove-pass match `^lankit:` and nothing else. An object with any
-other comment, or none, belongs to the operator: lankit never expects it, removes it, or reports it.
-The consequence to know about: a router carrying config that *collides* with what lankit adds (an
-existing VLAN interface, pool or address with the same name) but not tagged `lankit:` looks bare to
-lankit. Its first apply fails on the collision, is caught (#66), and is reverted remove-only. See
-#70 for the pre-check that would catch this before arming.
+Detection, verification and every remove-pass match `^lankit:` and nothing else. lankit builds on
+MikroTik's default configuration (`defconf`-commented objects, plus the uncommented `default-dhcp`
+pool and `defconf` DHCP server) and owns everything tagged `lankit:`. Anything else in a
+`TAG_TABLES` table is config made by hand: no remove-pass touches it and no revert restores it.
+
+The aim is that nothing falls in that third group, so lankit reports it rather than ignoring it
+(`lankit.core.untagged`, #70):
+
+- **`lankit audit`** lists every static, non-defconf object without a `lankit:` tag, across all
+  `TAG_TABLES`, under *Not managed by lankit*.
+- **`lankit apply`** scans the same tables right after `preflight_router`, before the snapshot,
+  bundle or failsafe. If an untagged object has the same identity as an `add` in this apply (same
+  interface or pool name, same address, same list entry...) it **refuses**: that object would
+  survive the remove-pass and the `add` would fail partway through the import ("already have such
+  ..."). Other untagged objects produce a one-line warning and the apply continues.
+
+Making lankit own *all* of the router, base configuration included, would mean applying through
+`/system reset-configuration`; that remains deferred (§11).
 
 ## 10. RouterOS version assumptions
 

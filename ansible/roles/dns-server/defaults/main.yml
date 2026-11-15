@@ -1,0 +1,8 @@
+---
+# Boot the DNS server to the console, with no desktop session. Set false to
+# keep a desktop on a Pi that also serves as a workstation.
+lankit_dns_headless: true
+
+# Restart pihole-FTL when it is running but stops answering DNS (checked
+# every minute). Set false to leave FTL alone.
+lankit_dns_watchdog: true

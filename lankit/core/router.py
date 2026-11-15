@@ -309,12 +309,18 @@ class RouterConnection:
         revert-verification path (decline/import-error) that must never
         print a success mark over a silent partial failure."""
         from lankit.core import revert
+        return revert.read_live_tags(self.read_tag_tables())
+
+    def read_tag_tables(self) -> dict[str, str]:
+        """Raw print-detail output of every table lankit writes to, keyed by
+        TAG_TABLES id. Tables whose print errors (no wifi package) are absent."""
+        from lankit.core import revert
         raw_outputs: dict[str, str] = {}
         for table in revert.TAG_TABLES:
             out, err = self.run_tolerant(table.print_cmd)
             if not err:
                 raw_outputs[table.id] = out
-        return revert.read_live_tags(raw_outputs)
+        return raw_outputs
 
     def read_master_wifi_facts(self) -> Optional["MasterWifiFacts"]:
         """Capture wifi1/wifi2's current SSID and hidden state, for the

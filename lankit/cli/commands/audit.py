@@ -8,7 +8,8 @@ each item as:
   ok       — lankit: tag present and key field values match expected
   missing  — lankit expects it but the router has nothing
   drifted  — lankit: tag present but a key field was changed after apply
-  rogue    — resource exists on the router with no lankit: tag at all
+  rogue    — not lankit's: no lankit: or defconf tag, or a lankit: tag that
+             network.yml no longer produces
 """
 
 from __future__ import annotations
@@ -127,11 +128,12 @@ def _audit_vlans(cfg, conn) -> list[AuditResult]:
             drift = _check_drift(match, expected_fields)
             results.append(AuditResult(name, tag, "ok" if not drift else "drifted", drift))
 
-    # Rogues: VLAN interfaces without any lankit: tag
+    # Stale: lankit:-tagged VLAN interfaces network.yml no longer produces.
+    # (Untagged ones are reported by _audit_untagged.)
     kit_tags = {f"lankit:vlan:{n}:interface" for n in cfg.segments}
     for rec in records:
         comment = rec.get("comment", "")
-        if not comment.startswith("lankit:") or comment not in kit_tags:
+        if comment.startswith("lankit:") and comment not in kit_tags:
             rogue_name = rec.get("name", "?")
             # Skip master interfaces (not created by lankit)
             if not rogue_name.startswith("_master"):
@@ -161,12 +163,12 @@ def _audit_ip_addresses(cfg, conn) -> list[AuditResult]:
             drift = _check_drift(match, expected_fields)
             results.append(AuditResult(name, tag, "ok" if not drift else "drifted", drift))
 
-    # Rogues: IPs on vlan-* interfaces without lankit: tag
+    # Stale: lankit:-tagged IPs on vlan-* that network.yml no longer produces
     kit_tags = {f"lankit:dhcp:{n}:address" for n in cfg.segments}
     for rec in records:
         comment = rec.get("comment", "")
         iface = rec.get("interface", "")
-        if iface.startswith("vlan-") and (not comment.startswith("lankit:") or comment not in kit_tags):
+        if iface.startswith("vlan-") and (comment.startswith("lankit:") and comment not in kit_tags):
             results.append(AuditResult(
                 rec.get("address", "?"), None, "rogue",
                 f"interface={iface}"
@@ -208,12 +210,12 @@ def _audit_dhcp_servers(cfg, conn) -> list[AuditResult]:
             drift = _check_drift(match, expected_fields)
             results.append(AuditResult(name, tag, "ok" if not drift else "drifted", drift))
 
-    # Rogues: DHCP servers on vlan-* without lankit: tag
+    # Stale: lankit:-tagged DHCP servers network.yml no longer produces
     kit_tags = {f"lankit:dhcp:{n}:server" for n in cfg.segments}
     for rec in records:
         comment = rec.get("comment", "")
         iface = rec.get("interface", "")
-        if iface.startswith("vlan-") and (not comment.startswith("lankit:") or comment not in kit_tags):
+        if iface.startswith("vlan-") and (comment.startswith("lankit:") and comment not in kit_tags):
             results.append(AuditResult(
                 rec.get("name", "?"), None, "rogue",
                 f"interface={iface}"
@@ -268,15 +270,7 @@ def _audit_firewall(cfg, conn) -> list[AuditResult]:
         else:
             results.append(AuditResult(label, tag, "missing", ""))
 
-    # Rogues: forward-chain rules without any lankit: comment
-    for rec in records:
-        comment = rec.get("comment", "")
-        chain = rec.get("chain", "")
-        if chain == "forward" and not comment.startswith("lankit:") and not comment.startswith("defconf"):
-            results.append(AuditResult(
-                comment or "(no comment)", None, "rogue",
-                f"chain={chain} action={rec.get('action','?')}"
-            ))
+    # Untagged rules are reported by _audit_untagged, across every table.
 
     # Address lists
     out_al, _ = conn.run_tolerant("/ip firewall address-list print detail without-paging")
@@ -299,7 +293,7 @@ def _audit_firewall(cfg, conn) -> list[AuditResult]:
         status = "ok" if tag in live_al_tags else "missing"
         results.append(AuditResult(label, tag, status, ""))
 
-    # Rogue address-list entries (on net-* or all-local without lankit: tag)
+    # Stale: lankit:-tagged net-*/all-local entries network.yml no longer produces
     kit_al_tags = {f"lankit:fw:{n}:address-list" for n in cfg.segments} | {
         "lankit:fw:all:local-rfc1918", "lankit:fw:all:local-flat"
     }
@@ -307,7 +301,7 @@ def _audit_firewall(cfg, conn) -> list[AuditResult]:
         comment = rec.get("comment", "")
         lst = rec.get("list", "")
         if (lst.startswith("net-") or lst == "all-local") and \
-                (not comment.startswith("lankit:") or comment not in kit_al_tags):
+                (comment.startswith("lankit:") and comment not in kit_al_tags):
             results.append(AuditResult(
                 f"{lst}={rec.get('address','?')}", None, "rogue", f"list={lst}"
             ))
@@ -343,7 +337,7 @@ def _audit_wifi(cfg, conn) -> list[AuditResult]:
                 else:
                     results.append(AuditResult(f"{name} ({band})", tag, "ok", ""))
 
-    # Rogues: wifi interfaces that aren't masters and have no lankit: tag
+    # Stale: lankit:-tagged virtual APs network.yml no longer produces
     kit_tags = set()
     for name, seg in cfg.segments.items():
         if seg.has_wifi:
@@ -355,7 +349,7 @@ def _audit_wifi(cfg, conn) -> list[AuditResult]:
         iface_name = rec.get("name", "")
         if iface_name.startswith("_master") or iface_name in ("wifi1", "wifi2"):
             continue
-        if not comment.startswith("lankit:") or comment not in kit_tags:
+        if comment.startswith("lankit:") and comment not in kit_tags:
             results.append(AuditResult(
                 iface_name, None, "rogue",
                 f"ssid={rec.get('configuration.ssid') or rec.get('ssid','?')}"
@@ -383,16 +377,28 @@ def _audit_wifi_security(cfg, conn) -> list[AuditResult]:
         else:
             results.append(AuditResult(f"{name} security profile", tag, "ok", ""))
 
-    # Rogues: security profiles without a lankit: tag
+    # Stale: lankit:-tagged security profiles network.yml no longer produces
     for rec in records:
         comment = rec.get("comment", "")
-        if not comment.startswith("lankit:") or comment not in kit_tags:
+        if comment.startswith("lankit:") and comment not in kit_tags:
             results.append(AuditResult(
                 rec.get("name", "?"), None, "rogue",
                 f"comment={comment!r}" if comment else "no comment"
             ))
 
     return results
+
+
+def _audit_untagged(conn) -> list[AuditResult]:
+    """Everything in a table lankit writes to that carries neither a lankit:
+    nor a defconf tag: config made by hand, invisible to lankit's
+    remove-passes and revert (lankit.core.untagged)."""
+    from lankit.core import untagged
+    return [
+        AuditResult(f"{u.path} {u.label}", None, "rogue",
+                    f";;; {u.comment}" if u.comment else "no comment")
+        for u in untagged.find_untagged(conn.read_tag_tables())
+    ]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -452,7 +458,7 @@ def _summary_counts(results: list[AuditResult]) -> tuple[int, int, int, int]:
 @click.option("--config", "-c", "config_path", type=click.Path(), default=None,
               metavar="PATH", help="Path to network.yml")
 @click.option("--section", "-s", type=click.Choice(
-    ["vlans", "dhcp", "firewall", "wifi", "all"], case_sensitive=False),
+    ["vlans", "dhcp", "firewall", "wifi", "untagged", "all"], case_sensitive=False),
     default="all", show_default=True, help="Limit to one section")
 @click.option("--rogue-only", is_flag=True, default=False,
               help="Show only rogue entries")
@@ -467,9 +473,11 @@ def audit(config_path, section, rogue_only, problems):
       ✓ ok       — present and matches expected config
       ✗ missing  — lankit expects it but it's not on the router
       ~ drifted  — lankit: tag present, but a key field was changed
-      ! rogue    — exists on the router with no lankit: tag
+      ! rogue    — not lankit's: no lankit: tag (and not defconf), or a
+                   lankit: tag network.yml no longer produces
 
-    Sections: vlans, dhcp (address/pool/server/lease), firewall, wifi.
+    Sections: vlans, dhcp (address/pool/server/lease), firewall, wifi, and
+    untagged (every table lankit writes to, for config lankit didn't make).
 
     \b
     Examples:
@@ -506,6 +514,7 @@ def audit(config_path, section, rogue_only, problems):
                 "dhcp":     section in ("dhcp", "all"),
                 "firewall": section in ("firewall", "all"),
                 "wifi":     section in ("wifi", "all"),
+                "untagged": section in ("untagged", "all"),
             }
 
             all_results: list[tuple[str, list[AuditResult]]] = []
@@ -535,6 +544,10 @@ def audit(config_path, section, rogue_only, problems):
                     + _audit_wifi_security(cfg, conn)
                 )
                 all_results.append(("WiFi", wifi_results))
+
+            if sections_to_run["untagged"]:
+                console.print("[dim]  Looking for config lankit doesn't manage...[/dim]")
+                all_results.append(("Not managed by lankit", _audit_untagged(conn)))
 
             console.print()
 
@@ -587,8 +600,9 @@ def audit(config_path, section, rogue_only, problems):
                 console.print("  Run [bold]lankit apply[/bold] to reconcile missing/drifted rules.")
             if total_rogue:
                 console.print(
-                    "  [magenta]Rogue entries[/magenta] were not created by lankit. "
-                    "Review manually via WinBox or SSH."
+                    "  [magenta]Rogue entries[/magenta] are outside lankit: it won't remove, "
+                    "revert or restore them.\n  Remove them on the router, or describe what "
+                    "they do in network.yml."
                 )
             console.print()
 

@@ -74,7 +74,7 @@ def rules(config_path, segment, unit):
     found = 0
     for rsc_file in rsc_files:
         text = rsc_file.read_text()
-        # Find all "add ..." blocks with lanlankit: comments
+        # Find all "add ..." blocks with lankit: comments
         # Each rule is a multi-line block ending with a comment
         block_lines = []
         for line in text.splitlines():
