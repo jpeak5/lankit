@@ -29,7 +29,7 @@ add name=dns.{{ internal_domain }} \
     ttl=1h type=A \
     comment="lankit:dns:dns-server:hostname"
 add name=pihole.{{ internal_domain }} \
-    address={{ dns_server_ip }} \
+    address={{ app_server_ip or dns_server_ip }} \
     ttl=1h type=A \
     comment="lankit:dns:pihole:hostname"
 {% endif %}

@@ -19,6 +19,7 @@ ROLE = Path(__file__).parents[2] / "ansible/roles/dns-server"
 
 
 def _pair(raw, vip="10.20.0.2", dns_ip="10.20.0.4"):
+    raw["hosts"]["dns_server"]["hostname"] = "dns"
     raw["hosts"]["dns_server"]["ip"] = dns_ip
     raw["hosts"]["dns_server"]["services"] = ["pihole", "unbound"]
     raw["hosts"]["app_server"] = {
@@ -136,3 +137,54 @@ def test_keepalived_config_per_node(pair_cfg):
         assert "10.20.0.2/24 dev eth0" in conf
         assert "virtual_router_id 53" in conf
         assert "track_script" in conf
+
+
+# ── Pi-hole dashboard by name ────────────────────────────────────────────────
+
+from lankit.cli.commands.provision import _build_dns_hosts
+
+CADDY = Path(__file__).parents[2] / "ansible/roles/caddy/templates"
+
+
+def _render_caddy(**v):
+    env = jinja2.Environment(loader=jinja2.FileSystemLoader(str(CADDY)),
+                             undefined=jinja2.StrictUndefined)
+    base = dict(lankit_internal_domain="internal", lankit_portals={"registration": True},
+                lankit_pihole_enabled=True, lankit_dns_server_ip="10.20.0.2",
+                lankit_tls_enabled=True)
+    base.update(v)
+    return env.get_template("Caddyfile.j2").render(**base)
+
+
+@pytest.mark.parametrize("tls", [True, False])
+def test_caddy_serves_the_dashboard_via_the_service_address(tls):
+    conf = _render_caddy(lankit_tls_enabled=tls)
+    site = "pihole.internal {" if tls else "http://pihole.internal {"
+    assert site in conf
+    assert "reverse_proxy 10.20.0.2:8081" in conf
+    if tls:
+        assert "http://pihole.internal" in conf     # in the http->https redirect list
+
+
+def test_caddy_has_no_dashboard_without_pihole():
+    assert "pihole.internal" not in _render_caddy(lankit_pihole_enabled=False)
+
+
+def test_dashboard_name_points_at_the_app_server(pair_cfg):
+    hosts = _build_dns_hosts(pair_cfg)
+    assert "10.20.0.3 pihole.internal" in hosts
+    texts = render_texts(pair_cfg, segment_filter=None, include_globals=True)
+    rec = re.search(r'add name=pihole\.internal \\\s+address=(\S+)', texts["05-dns.rsc"])
+    assert rec and rec.group(1) == "10.20.0.3"
+
+
+def test_dns_name_follows_the_shared_address(pair_cfg):
+    hosts = _build_dns_hosts(pair_cfg)
+    assert "10.20.0.2 dns.internal" in hosts
+    assert "10.20.0.4 dns.internal" not in hosts
+
+
+def test_no_dashboard_record_when_a_host_is_named_pihole(cfg):
+    # The minimal fixture's DNS host is called "pihole": its own record stands.
+    hosts = [h for h in _build_dns_hosts(cfg) if h.endswith(" pihole.internal")]
+    assert hosts == [f"{cfg.hosts['dns_server'].ip} pihole.internal"]

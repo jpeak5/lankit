@@ -214,16 +214,24 @@ def _build_dns_hosts(cfg) -> list[str]:
     # Segment gateways
     for name, seg in cfg.segments.items():
         lines.append(f"{seg.gateway} {name}.{domain}")
-    # Named hosts (use FQDN)
+    # Named hosts (use FQDN). The DNS server's name is the DNS *service*, so
+    # with a pair it follows the shared address, not one Pi.
     for name, h in cfg.hosts.items():
         if h.enabled:
-            lines.append(f"{h.ip} {h.hostname}.{domain}")
+            ip = cfg.dns_ip if (name == "dns_server" and cfg.dns_ha) else h.ip
+            lines.append(f"{ip} {h.hostname}.{domain}")
     # Portal subdomains — each enabled portal gets its own DNS name on app_server
     app = cfg.hosts.get("app_server")
     if app and app.enabled:
         for portal, subdomain in _PORTAL_SUBDOMAINS.items():
             if cfg.portals.get(portal):
                 lines.append(f"{app.ip} {subdomain}.{domain}")
+        # The Pi-hole dashboard is served by Caddy on the app server.
+        # Skipped if a host is itself named "pihole": its own record wins.
+        dns = cfg.hosts.get("dns_server")
+        named_pihole = any(h.hostname == "pihole" for h in cfg.hosts.values() if h.enabled)
+        if dns and dns.enabled and not named_pihole:
+            lines.append(f"{app.ip} pihole.{domain}")
     return lines
 
 
