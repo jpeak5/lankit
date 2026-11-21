@@ -24,7 +24,7 @@
 #   lankit_dns_ha_start       — false installs keepalived but leaves it stopped (cutover staging)
 
 - name: Provision DNS server (Pi-hole + Unbound)
-  hosts: dns_server
+  hosts: lankit_dns
   become: yes
   vars:
     lankit_dnssec: "{{ (lankit_dnssec | default('true')) | bool }}"
@@ -33,7 +33,7 @@
     - dns-server
 
 - name: Provision app server (Caddy + portal)
-  hosts: app_server
+  hosts: lankit_apps
   become: yes
   roles:
     - caddy

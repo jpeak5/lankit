@@ -72,11 +72,14 @@ def provision(config_path, host, tags, check, verbose):
 
     # Map services to Ansible groups — supports single-box (all services on one host)
     # and multi-box (concerns separated by hardware) equally.
+    # Group names must differ from host names: when a group and a host share a
+    # name, Ansible resolves "hosts: <name>" to the host alone, so a second
+    # DNS node would silently be skipped.
     _SERVICE_GROUP = {
-        "pihole":  "dns_server",
-        "unbound": "dns_server",
-        "caddy":   "app_server",
-        "portal":  "app_server",
+        "pihole":  "lankit_dns",
+        "unbound": "lankit_dns",
+        "caddy":   "lankit_apps",
+        "portal":  "lankit_apps",
     }
 
     ssh_key = str(Path(cfg.ssh_key).expanduser())
