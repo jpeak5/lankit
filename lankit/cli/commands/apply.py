@@ -163,7 +163,7 @@ def _probe_plan(cfg, segment):
     A full or --script apply is answerable for every segment.
 
     dns_ip is returned only when a lankit-managed resolver is configured
-    (hosts.dns_server). When cfg.dns_ip is a public resolver instead, this
+    (hosts.dns_server, enabled). When cfg.dns_ip is a public resolver instead, this
     apply cannot have broken it and checking it would only add noise. It
     is the address clients are handed (cfg.dns_ip): with dns_ha that is
     the shared address, which may sit on a different node and port than
@@ -177,7 +177,7 @@ def _probe_plan(cfg, segment):
     else:
         gateways = [(name, seg.gateway) for name, seg in cfg.segments.items()]
     dns_host = cfg.hosts.get("dns_server")
-    return gateways, (cfg.dns_ip if dns_host else None)
+    return gateways, (cfg.dns_ip if dns_host and dns_host.enabled else None)
 
 
 def _probe_verdict(gateway_results, dns_result):

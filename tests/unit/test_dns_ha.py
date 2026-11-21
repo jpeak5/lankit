@@ -212,3 +212,15 @@ def test_post_apply_probe_without_pair_asks_the_host(cfg):
     from lankit.cli.commands.apply import _probe_plan
     _, dns_ip = _probe_plan(cfg, None)
     assert dns_ip == cfg.hosts["dns_server"].ip
+
+
+def test_post_apply_probe_skips_public_resolver_when_pihole_disabled(minimal_yml, mutated):
+    # dns_server disabled + dns_ip 1.1.1.1: this apply can't have broken a
+    # public resolver, and a WAN blip must not fail the probe.
+    from lankit.cli.commands.apply import _probe_plan
+
+    def m(raw):
+        raw["hosts"]["dns_server"]["enabled"] = False
+        raw["dns_ip"] = "1.1.1.1"
+    _, dns_ip = _probe_plan(load(mutated(minimal_yml, m)), None)
+    assert dns_ip is None
