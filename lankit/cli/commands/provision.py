@@ -130,13 +130,20 @@ def provision(config_path, host, tags, check, verbose):
     with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as inv_f:
         inv_f.write("\n".join(inventory_lines))
         inv_path = inv_f.name
+    # Extra-vars carry secrets (the Pi-hole password), so they go in a
+    # private file passed as @path: never on the command line, where `ps`
+    # shows them to every local user, and never in the echoed command.
+    # NamedTemporaryFile creates the file 0600.
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as vars_f:
+        vars_f.write(_format_extra_vars(extra_vars))
+        vars_path = vars_f.name
 
     try:
         cmd = [
             _find_bin("ansible-playbook"),
             str(playbook),
             "-i", inv_path,
-            "--extra-vars", _format_extra_vars(extra_vars),
+            "--extra-vars", f"@{vars_path}",
         ]
         if tags:
             cmd += ["--tags", tags]
@@ -153,6 +160,7 @@ def provision(config_path, host, tags, check, verbose):
             raise SystemExit(result.returncode)
     finally:
         os.unlink(inv_path)
+        os.unlink(vars_path)
 
 
 def _dns_gateway(cfg) -> str:

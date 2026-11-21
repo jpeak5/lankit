@@ -90,6 +90,10 @@
     owner: portal
     group: portal
     mode: "0600"
+  # Holds the Pi-hole password: no diff (lankit provision --check adds
+  # --diff) and no logged arguments.
+  diff: false
+  no_log: true
   notify: restart lankit-portal
 
 # ── TLS certificates ──────────────────────────────────────────────────────────
