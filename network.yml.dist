@@ -352,6 +352,8 @@ hosts:
     mac: "CHOOSE"             # Run: ip link show eth0 on the Pi, or check router DHCP leases
     ssh_user: "CHOOSE"        # The user lankit SSHes in as (must have sudo)
     services: [pihole, unbound]
+    # port: "ether2"          # Router port it's plugged into. Defaults to
+    #                         # router.lan_interface for dns_server.
 
   app_server:
     # Optional: portals, file shares, Caddy. Separating this from the
@@ -362,6 +364,10 @@ hosts:
     mac: "CHOOSE"             # Run: ip link show eth0 on the Pi, or check router DHCP leases
     ssh_user: "CHOOSE"        # The user lankit SSHes in as (must have sudo)
     services: [caddy, portal]
+    # port: "ether3"          # Router port it's plugged into, if wired straight
+    #                         # to the router. lankit puts that port on this
+    #                         # host's segment and off the flat network. Leave
+    #                         # unset if it's behind a switch or trunk.
     enabled: false            # Set to true once the host is provisioned
 
 

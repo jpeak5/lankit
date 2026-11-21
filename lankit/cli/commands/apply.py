@@ -416,6 +416,8 @@ def apply(config_path, no_generate, dry_run, script, segment, skip_probe, strict
             _check_failsafe_fired_marker(conn, console)
             _preflight_router(conn, console, version)
             _check_untagged(conn, [s.read_text() for s in scripts], console)
+            if segment is None and any(s.name == "01-vlans.rsc" for s in scripts):
+                _check_host_ports(conn, cfg, console)
 
             # ── Global-rule pre-flight (G3.3) ──────────────────────────────────
             # A --segment apply brings up that segment's VLAN, DHCP and WiFi
@@ -494,7 +496,8 @@ def apply(config_path, no_generate, dry_run, script, segment, skip_probe, strict
             # fasttrack rule in place (untagged, design §5.3); the revert
             # must re-enable it.
             bundle = revert.build_revert_bundle(
-                archive, cfg.router.lan_interface, master_facts, fasttrack_reenable=True
+                archive, cfg.router.lan_interface, master_facts, fasttrack_reenable=True,
+                host_ports=revert.host_ports_to_restore(cfg, archive),
             )
             bundle_size = len(bundle.encode("utf-8"))
             console.print("  Preparing revert bundle...")
@@ -649,6 +652,7 @@ def apply(config_path, no_generate, dry_run, script, segment, skip_probe, strict
                             cfg.router.ip, archive_texts,
                             segments_applied=segs_applied, globals_applied=globals_applied,
                             network_yml_hash=network_yml_hash, lan_interface=cfg.router.lan_interface,
+                            host_ports=list(cfg.host_ports()),
                         )
                     except Exception as e:
                         console.print(f"  [yellow]⚠[/yellow] Could not save known-good archive: {e}")
@@ -758,6 +762,7 @@ def _migration_bootstrap(conn, cfg, wifi_passphrases, segment, network_yml_hash,
                 cfg.router.ip, texts,
                 segments_applied=sorted(cfg.segments.keys()), globals_applied=True,
                 network_yml_hash=network_yml_hash, lan_interface=cfg.router.lan_interface,
+                host_ports=list(cfg.host_ports()),
             )
             console.print(f"  [green]✓[/green] Recorded current state as known-good ({aid})")
             return revert.load_known_good(cfg.router.ip, aid)
@@ -786,6 +791,37 @@ def _migration_bootstrap(conn, cfg, wifi_passphrases, segment, network_yml_hash,
     console.print("  Run [bold]lankit probe[/bold] first to see exactly what differs, or:")
     _confirm_remove_only_failsafe(console)
     return None
+
+
+def _check_host_ports(conn, cfg, console) -> None:
+    """Refuse if a host port isn't a port of the bridge.
+
+    01-vlans names each host port in `untagged=`; a name RouterOS doesn't
+    know aborts the import there, after the VLAN rows were removed and
+    before filtering is back on, leaving the router to the failsafe. A real
+    interface that isn't a bridge port does nothing at all, so the host
+    silently stays where it was. Both are caught before anything changes.
+    """
+    import re
+
+    wanted = sorted(cfg.host_ports())
+    if not wanted:
+        return
+    out, err = conn.run_tolerant("/interface bridge port print terse where bridge=bridge")
+    if err.strip() or not out.strip():
+        console.print("  [dim]Could not read the bridge ports to check the host ports — "
+                      "continuing.[/dim]")
+        return
+    on_bridge = set(re.findall(r"(?:^|\s)interface=(\S+)", out))
+    missing = [p for p in wanted if p not in on_bridge]
+    if missing:
+        console.print()
+        console.print("[bold red]Refusing to apply:[/bold red] these host ports are not ports "
+                      "of the router's bridge: " + ", ".join(f"[bold]{p}[/bold]" for p in missing))
+        console.print(f"  Bridge ports: {', '.join(sorted(on_bridge)) or 'none'}")
+        console.print("  Fix hosts.<name>.port (or router.lan_interface for the DNS server) in "
+                      "network.yml. Nothing has been changed.")
+        raise SystemExit(1)
 
 
 def _check_untagged(conn, script_texts, console) -> None:

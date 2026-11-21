@@ -30,12 +30,12 @@ from __future__ import annotations
 import json
 import re
 import shutil
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
-from lankit.core.config import Config
+from lankit.core.config import FLAT_LAN_PORTS, Config
 
 # ─── RouterOS output parsing ────────────────────────────────────────────────
 #
@@ -256,10 +256,25 @@ class MasterWifiFacts:
     wifi2_hidden: bool
 
 
+# LAN ports the remove-pass always returns to PVID 1 (01-vlans' flat set).
+_FLAT_PORTS = FLAT_LAN_PORTS
+
+
+def host_ports_to_restore(cfg: Config, archive: Optional["KnownGoodArchive"]) -> list[str]:
+    """Host ports whose PVID the remove-pass must reset: the current
+    network.yml's and the archive's. A port in only one of them is either
+    re-set by the rebuild or should end on PVID 1, so the union is safe."""
+    ports = set(cfg.host_ports())
+    if archive is not None:
+        ports.update(archive.manifest.host_ports)
+    return sorted(ports)
+
+
 def build_remove_pass(
     lan_interface: str,
     master_wifi_facts: Optional[MasterWifiFacts] = None,
     fasttrack_reenable: bool = False,
+    host_ports: Iterable[str] = (),
 ) -> str:
     """Build the universal remove-pass: strips every lankit:-tagged resource
     and restores lankit's untagged `set` mutations. Running this alone
@@ -279,6 +294,10 @@ def build_remove_pass(
     scripted defconf-fasttrack disable (03-firewall.rsc, G3.7). The rule
     is untagged by design (§5.3/§11), so the remove-pass re-enables it
     here instead of the tag registry handling it.
+
+    host_ports: every port 01-vlans may have made a host access port
+    (see host_ports_to_restore). Each gets PVID 1 back; lan_interface and
+    ether3-5 are restored regardless, so repeats of those are dropped.
     """
     lines: list[str] = [
         "# lankit-revert: universal remove-pass",
@@ -334,10 +353,15 @@ def build_remove_pass(
         f'on-error={{ :log warning "lankit-revert: dns-server-port pvid restore failed" }}'
     )
     lines.append(
-        ':do { :foreach p in={"ether3";"ether4";"ether5"} do={ '
+        ':do { :foreach p in={' + ';'.join(f'"{p}"' for p in _FLAT_PORTS) + '} do={ '
         '/interface bridge port set [find where interface=$p] pvid=1 } } '
         'on-error={ :log warning "lankit-revert: ether3-5 pvid restore failed" }'
     )
+    for port in sorted(set(host_ports) - {lan_interface, *_FLAT_PORTS}):
+        lines.append(
+            f':do {{ /interface bridge port set [find where interface={port}] pvid=1 }} '
+            f'on-error={{ :log warning "lankit-revert: host-port {port} pvid restore failed" }}'
+        )
 
     if master_wifi_facts is not None:
         f = master_wifi_facts
@@ -410,6 +434,9 @@ class ArchiveManifest:
     globals_applied: bool
     expected_tags: list[str]       # sorted; derived from the archived scripts
     lan_interface: str             # needed by build_remove_pass's PVID restore
+    # Host access ports at archive time (Config.host_ports); absent from
+    # archives written before hosts.<name>.port existed.
+    host_ports: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -430,6 +457,7 @@ def save_known_good(
     globals_applied: bool,
     network_yml_hash: str,
     lan_interface: str,
+    host_ports: Iterable[str] = (),
 ) -> str:
     """Archive a rendered script set as the new known-good state.
 
@@ -461,6 +489,7 @@ def save_known_good(
         globals_applied=globals_applied,
         expected_tags=sorted(expected),
         lan_interface=lan_interface,
+        host_ports=sorted(host_ports),
     )
     manifest_path = archive_dir / "manifest.json"
     manifest_path.write_text(json.dumps(asdict(manifest), indent=2))
@@ -599,6 +628,7 @@ def build_revert_bundle(
     lan_interface: str,
     master_wifi_facts: Optional[MasterWifiFacts] = None,
     fasttrack_reenable: bool = False,
+    host_ports: Iterable[str] = (),
 ) -> str:
     """Build the complete lankit-revert.rsc: universal remove-pass, then
     (if archive is not None) the archived script set re-imported in normal
@@ -610,7 +640,7 @@ def build_revert_bundle(
     192.168.88.0/24 management network, matching what the rollback card
     already tells the household to fall back on.
     """
-    parts = [build_remove_pass(lan_interface, master_wifi_facts, fasttrack_reenable)]
+    parts = [build_remove_pass(lan_interface, master_wifi_facts, fasttrack_reenable, host_ports)]
 
     if archive is None:
         parts.append('\n:log info "lankit-revert: remove-only revert complete"\n')
