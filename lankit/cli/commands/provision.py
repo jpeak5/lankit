@@ -127,18 +127,21 @@ def provision(config_path, host, tags, check, verbose):
         "lankit_tls_ca_cert":       cfg.tls.ca_cert if cfg.tls else "",
     }
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as inv_f:
-        inv_f.write("\n".join(inventory_lines))
-        inv_path = inv_f.name
     # Extra-vars carry secrets (the Pi-hole password), so they go in a
     # private file passed as @path: never on the command line, where `ps`
     # shows them to every local user, and never in the echoed command.
-    # NamedTemporaryFile creates the file 0600.
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as vars_f:
-        vars_f.write(_format_extra_vars(extra_vars))
-        vars_path = vars_f.name
+    # Both files live in a 0700 directory that is removed however this
+    # exits, so a failure between writing and running can't strand the
+    # password in /tmp.
+    with tempfile.TemporaryDirectory(prefix="lankit-provision-") as work:
+        inv_path = os.path.join(work, "inventory.ini")
+        vars_path = os.path.join(work, "extra-vars.json")
+        with open(inv_path, "w") as f:
+            f.write("\n".join(inventory_lines))
+        fd = os.open(vars_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(_format_extra_vars(extra_vars))
 
-    try:
         cmd = [
             _find_bin("ansible-playbook"),
             str(playbook),
@@ -158,9 +161,6 @@ def provision(config_path, host, tags, check, verbose):
         result = subprocess.run(cmd, cwd=str(ansible_dir.parent))
         if result.returncode != 0:
             raise SystemExit(result.returncode)
-    finally:
-        os.unlink(inv_path)
-        os.unlink(vars_path)
 
 
 def _dns_gateway(cfg) -> str:
