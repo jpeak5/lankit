@@ -123,7 +123,8 @@ These carry no `lankit:` comment; the remove-pass generator emits explicit resto
 |---|---|---|
 | `bridge vlan-filtering=yes` (01) | `set bridge vlan-filtering=no` (step 2) | constant (defconf value); the rebuild payload re-enables it when `globals_applied` |
 | DNS-server port PVID (01: `set [find where interface=<lan_interface>] pvid=<dns vlan>`) | `set [find where interface=<lan_interface>] pvid=1` | `lan_interface` from the archive's manifest (current `network.yml` for first-apply) |
-| ether3–5 PVID (01 sets them *to* 1) | `set ... pvid=1` — belt-and-suspenders no-op | constant |
+| Host-port PVIDs (01: each `hosts.<name>.port` → `pvid=<host's vlan>`; dns_server's defaults to `lan_interface`) | `set ... pvid=1` per port, for ports not already covered by the two rows around this one | `revert.host_ports_to_restore`: union of the current `network.yml`'s host ports and the archive manifest's `host_ports` (absent, so empty, in archives older than the field) |
+| ether3–5 PVID (01 sets them *to* 1, less any host port) | `set ... pvid=1`; a no-op for ports 01 left flat | constant |
 | Master WiFi hide/rename (04: `wifi1`/`wifi2` → `_master-*-noconnect`, hidden) | restore captured `configuration.ssid` / `hide-ssid` values | captured live by the **caller** at bundle-generation time (apply reads two fields over the existing connection and passes them in); if capture fails, omit the block and warn — masters stay hidden, wired path unaffected |
 | defconf fasttrack disable (future, G3.7) | `enable [find where comment="defconf: fasttrack" && disabled=yes]` | constant; only emitted once G3.7 lands. G3.7 must not tag the defconf rule with `lankit:` (the remove-pass would try to delete a defconf rule); it disables it and this design re-enables it. |
 

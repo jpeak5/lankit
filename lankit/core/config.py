@@ -81,6 +81,7 @@ class Host:
     services: list[str]
     ssh_user: str = "pi"
     enabled: bool = True
+    port: Optional[str] = None   # router port it's wired to (see Config.host_ports)
 
 
 @dataclass
@@ -135,6 +136,24 @@ class Config:
     # Directory of the network.yml this was loaded from. Site outputs
     # (generated scripts, apply.log) live here, never in the tool.
     config_dir: Optional[Path] = None
+
+    def host_ports(self) -> dict[str, str]:
+        """Router ports with a host wired directly to them: {port: segment}.
+
+        Each becomes an untagged access port on that segment and leaves the
+        flat network. dns_server's port defaults to router.lan_interface
+        (the one host port lankit modelled before `port:` existed); other
+        hosts have a port only when it's set. Disabled hosts are skipped.
+        Validation guarantees one segment per port.
+        """
+        ports: dict[str, str] = {}
+        for name, h in self.hosts.items():
+            if not h.enabled:
+                continue
+            port = h.port or (self.router.lan_interface if name == "dns_server" else None)
+            if port:
+                ports[port] = h.segment
+        return ports
 
     def segments_with_wifi(self) -> dict[str, Segment]:
         return {n: s for n, s in self.segments.items() if s.has_wifi}
@@ -294,6 +313,7 @@ def _validate_cross_references(raw: dict) -> None:
             )
 
     errors.extend(_dns_ha_errors(raw))
+    errors.extend(_host_port_errors(raw))
 
     if errors:
         raise ConfigError("Cross-reference errors in network.yml:\n" + "\n".join(errors))
@@ -342,6 +362,31 @@ def _dns_ha_errors(raw: dict) -> list[str]:
     return errors
 
 
+def _host_port_errors(raw: dict) -> list[str]:
+    """A host port is an untagged access port, so it carries one segment."""
+    errors = []
+    router = raw.get("router", {})
+    seen: dict[str, tuple[str, str]] = {}    # port -> (host name, segment)
+    for name, h in raw.get("hosts", {}).items():
+        if not isinstance(h, dict) or h.get("enabled", True) is False:
+            continue
+        port = h.get("port") or (router.get("lan_interface") if name == "dns_server" else None)
+        if not port:
+            continue
+        where = f"hosts.{name}.port" if h.get("port") else "router.lan_interface"
+        if port == router.get("wan_interface"):
+            errors.append(f"  {where}: {port} is router.wan_interface")
+            continue
+        if port in seen and seen[port][1] != h.get("segment"):
+            other, other_seg = seen[port]
+            errors.append(f"  {where}: {port} is also {other}'s port, on segment "
+                          f"'{other_seg}'. One port carries one segment; give "
+                          f"{name} ('{h.get('segment')}') its own port")
+            continue
+        seen.setdefault(port, (name, h.get("segment")))
+    return errors
+
+
 def _build_config(raw: dict, config_path: Optional[Path] = None) -> Config:
     segments = {
         name: Segment(name=name, **{
@@ -373,6 +418,7 @@ def _build_config(raw: dict, config_path: Optional[Path] = None) -> Config:
             services=h["services"],
             ssh_user=h.get("ssh_user", "pi"),
             enabled=h.get("enabled", True),
+            port=h.get("port"),
         )
 
     router_raw = raw["router"]

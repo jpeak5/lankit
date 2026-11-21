@@ -449,7 +449,10 @@ def execute_revert_operation(
             # have been edited since; fall back to it only when there is
             # no archive (remove-only path).
             lan_iface = archive.manifest.lan_interface if archive else cfg.router.lan_interface
-            bundle = revert.build_revert_bundle(archive, lan_iface, master_facts)
+            bundle = revert.build_revert_bundle(
+                archive, lan_iface, master_facts,
+                host_ports=revert.host_ports_to_restore(cfg, archive),
+            )
 
             console.print("  Uploading revert bundle...")
             if not upload_revert_bundle(conn, bundle, console):

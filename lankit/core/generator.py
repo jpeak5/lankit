@@ -133,6 +133,19 @@ def generate_one(
     return output_path
 
 
+# LAN ports 01-vlans keeps on the flat VLAN 1 (hAP ax³/ac numbering), less
+# any that a host is wired to. ether2 is the historical DNS-server port.
+_FLAT_PORTS = ("ether3", "ether4", "ether5")
+
+
+def _host_port_vlans(cfg: Config) -> dict[int, list[str]]:
+    """{vlan_id: [ports]} for host ports, ports sorted, VLANs ascending."""
+    out: dict[int, list[str]] = {}
+    for port, seg in cfg.host_ports().items():
+        out.setdefault(cfg.segments[seg].vlan_id, []).append(port)
+    return {v: sorted(ps) for v, ps in sorted(out.items())}
+
+
 def _build_context(
     cfg: Config,
     wifi_passphrases: Optional[dict[str, str]] = None,
@@ -223,5 +236,9 @@ def _build_context(
         "app_server_segment": app.segment if app and app.enabled else None,
         "wan_interface":      cfg.router.wan_interface,
         "lan_interface":      cfg.router.lan_interface,
+        # Ports with a host wired straight to them become untagged access
+        # ports on its segment; every other LAN port stays on the flat VLAN.
+        "host_port_vlans":    _host_port_vlans(cfg),
+        "flat_ports":         [p for p in _FLAT_PORTS if p not in cfg.host_ports()],
         "wifi_passphrases":   wifi_passphrases,
     }

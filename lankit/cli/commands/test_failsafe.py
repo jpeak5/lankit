@@ -209,7 +209,8 @@ def test_failsafe(config_path, seconds, full):
             if full:
                 master_facts = conn.read_master_wifi_facts()
                 payload = revert.build_revert_bundle(
-                    archive, cfg.router.lan_interface, master_facts, fasttrack_reenable=True
+                    archive, cfg.router.lan_interface, master_facts, fasttrack_reenable=True,
+                    host_ports=revert.host_ports_to_restore(cfg, archive),
                 )
                 import_file = REVERT_BUNDLE_NAME
                 expected_tags = set(revert.expected_tags(archive))

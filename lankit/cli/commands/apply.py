@@ -494,7 +494,8 @@ def apply(config_path, no_generate, dry_run, script, segment, skip_probe, strict
             # fasttrack rule in place (untagged, design §5.3); the revert
             # must re-enable it.
             bundle = revert.build_revert_bundle(
-                archive, cfg.router.lan_interface, master_facts, fasttrack_reenable=True
+                archive, cfg.router.lan_interface, master_facts, fasttrack_reenable=True,
+                host_ports=revert.host_ports_to_restore(cfg, archive),
             )
             bundle_size = len(bundle.encode("utf-8"))
             console.print("  Preparing revert bundle...")
@@ -649,6 +650,7 @@ def apply(config_path, no_generate, dry_run, script, segment, skip_probe, strict
                             cfg.router.ip, archive_texts,
                             segments_applied=segs_applied, globals_applied=globals_applied,
                             network_yml_hash=network_yml_hash, lan_interface=cfg.router.lan_interface,
+                            host_ports=list(cfg.host_ports()),
                         )
                     except Exception as e:
                         console.print(f"  [yellow]⚠[/yellow] Could not save known-good archive: {e}")
@@ -758,6 +760,7 @@ def _migration_bootstrap(conn, cfg, wifi_passphrases, segment, network_yml_hash,
                 cfg.router.ip, texts,
                 segments_applied=sorted(cfg.segments.keys()), globals_applied=True,
                 network_yml_hash=network_yml_hash, lan_interface=cfg.router.lan_interface,
+                host_ports=list(cfg.host_ports()),
             )
             console.print(f"  [green]✓[/green] Recorded current state as known-good ({aid})")
             return revert.load_known_good(cfg.router.ip, aid)

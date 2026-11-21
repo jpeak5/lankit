@@ -345,6 +345,11 @@
         "mac": {
           "type": "string"
         },
+        "port": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Router port this host is plugged into. lankit makes it an untagged access port on the host's segment and takes it off the flat network. dns_server defaults to router.lan_interface; leave it unset for a host that reaches the router some other way (a switch, a tagged trunk)."
+        },
         "services": {
           "type": "array",
           "items": {
