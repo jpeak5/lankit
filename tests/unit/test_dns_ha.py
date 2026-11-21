@@ -59,6 +59,8 @@ def test_no_dns_ha_is_unchanged(cfg):
     ("10.20.0.50", "inside the DHCP pool"),
     ("10.20.0.1", "segment gateway"),
     ("10.10.0.5", "outside the nodes' segment"),
+    ("10.20.0.0", "network address"),
+    ("10.20.0.999", "not an IPv4 address"),
 ])
 def test_bad_vip_is_refused(minimal_yml, mutated, vip, expect):
     msg = _load_err(minimal_yml, mutated, lambda raw: _pair(raw, vip=vip))
@@ -137,6 +139,14 @@ def test_keepalived_config_per_node(pair_cfg):
         assert "10.20.0.2/24 dev eth0" in conf
         assert "virtual_router_id 53" in conf
         assert "track_script" in conf
+        # A node fresh from boot must prove itself before it can preempt.
+        assert re.search(r"vrrp_script lankit_dns_check \{[^}]*\binit_fail\b", conf)
+
+
+def test_health_check_covers_pihole_and_unbound():
+    check = (ROLE / "files/lankit-dns-check.sh").read_text()
+    assert "@127.0.0.1 pi.hole" in check
+    assert "-p 5335 @127.0.0.1" in check
 
 
 # ── Pi-hole dashboard by name ────────────────────────────────────────────────

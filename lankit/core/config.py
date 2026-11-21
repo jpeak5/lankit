@@ -351,12 +351,18 @@ def _dns_ha_errors(raw: dict) -> list[str]:
         seg = segments.get(next(iter(node_segments)))
         if seg:
             net = ipaddress.ip_network(seg["subnet"], strict=False)
-            addr = ipaddress.ip_address(vip)
+            try:
+                addr = ipaddress.ip_address(vip)
+            except ValueError:
+                errors.append(f"  dns_ha.vip: '{vip}' is not an IPv4 address")
+                return errors
             if addr not in net:
                 errors.append(f"  dns_ha.vip: {vip} is outside the nodes' segment {net}")
             elif int(addr) - int(net.network_address) >= 10:
                 errors.append(f"  dns_ha.vip: {vip} is inside the DHCP pool (.10 and up); "
                               "pick an address below .10")
+            elif addr == net.network_address:
+                errors.append(f"  dns_ha.vip: {vip} is the segment's network address")
             elif addr == net.network_address + 1:
                 errors.append(f"  dns_ha.vip: {vip} is the segment gateway")
     return errors

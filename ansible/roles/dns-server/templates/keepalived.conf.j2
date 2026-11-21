@@ -18,6 +18,10 @@ vrrp_script lankit_dns_check {
     timeout 2
     fall 2          # two failed checks (~4 s): give the address up
     rise 2
+    # Start as failed: a node that has just booted must pass two checks
+    # before it can take the address, so the preferred node can't preempt
+    # its peer while its own Pi-hole is still starting.
+    init_fail
 }
 
 vrrp_instance lankit_dns {
