@@ -30,10 +30,17 @@ add interface=bridge \
 {% endfor %}
 
 # ── Bridge VLAN table — all VLANs tagged on CPU port ────────────────────────
+# Host ports are untagged members of their segment's row from the add, not
+# by a later `set [find where vlan-ids=N]`: a port already at PVID N (set by
+# hand, or by a previous apply) has a dynamic row for N that the find would
+# also match, and RouterOS refuses to change a dynamic row.
 {% for name, seg in segments.items() %}
 /interface bridge vlan
 add bridge=bridge \
     tagged=bridge \
+{% if include_globals and seg.vlan_id in host_port_vlans %}
+    untagged={{ host_port_vlans[seg.vlan_id] | join(',') }} \
+{% endif %}
     vlan-ids={{ seg.vlan_id }} \
     comment="lankit:vlan:{{ name }}:bridge"
 {% endfor %}
@@ -64,12 +71,11 @@ set [find where interface={{ port }}] pvid=1
 # ── Host port{{ 's' if ports | length > 1 else '' }} {{ ports | join(', ') }}: untagged access to VLAN {{ vlan_id }} ─────────────
 # The host sends untagged frames; the bridge tags them to VLAN {{ vlan_id }}.
 # Cross-VLAN traffic (DNS included) is routed, not tagged onto this port.
+# Untagged membership is on VLAN {{ vlan_id }}'s row above.
 /interface bridge port
 {% for port in ports %}
 set [find where interface={{ port }}] pvid={{ vlan_id }}
 {% endfor %}
-/interface bridge vlan
-set [find where vlan-ids={{ vlan_id }}] untagged={{ ports | join(',') }}
 
 {% endfor %}
 # ── Enable VLAN filtering — do this LAST ────────────────────────────────────

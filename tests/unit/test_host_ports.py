@@ -33,6 +33,20 @@ def _with_app_server(port="ether3", segment="servers", enabled=True):
     return mutate
 
 
+def _row_untagged(text, segment):
+    """untagged= of a segment's bridge-vlan add, or None."""
+    import re
+    m = re.search(r'add bridge=bridge \\\n((?:    .*\\\n)*?)    comment="lankit:vlan:'
+                  + segment + r':bridge"', text)
+    assert m, f"no bridge row for {segment}"
+    u = re.search(r"untagged=(\S+)", m.group(1))
+    return u.group(1) if u else None
+
+
+def _servers_row(text):
+    return _row_untagged(text, "servers")
+
+
 def _vlans(cfg) -> str:
     return render_texts(cfg, None, segment_filter=None, include_globals=True)["01-vlans.rsc"]
 
@@ -98,7 +112,7 @@ def test_default_render_unchanged(cfg):
     for p in ("ether3", "ether4", "ether5"):
         assert f"set [find where interface={p}] pvid=1" in text
     assert "set [find where interface=ether2] pvid=20" in text
-    assert "set [find where vlan-ids=20] untagged=ether2" in text
+    assert _servers_row(text) == "ether2"
 
 
 def test_app_server_port_leaves_flat_vlan(minimal_yml, mutated):
@@ -106,18 +120,20 @@ def test_app_server_port_leaves_flat_vlan(minimal_yml, mutated):
     assert "untagged=ether4,ether5" in text
     assert "set [find where interface=ether3] pvid=1" not in text
     assert "set [find where interface=ether3] pvid=20" in text
-    # Both host ports on one VLAN: a single set, or the second would
-    # overwrite the first's untagged membership.
-    assert "set [find where vlan-ids=20] untagged=ether2,ether3" in text
-    assert text.count("set [find where vlan-ids=20] untagged=") == 1
+    # Both host ports on one row; and never a `set [find where vlan-ids=N]`,
+    # which also matches the dynamic row a port already at PVID N has
+    # (CHR 7.24.2: "can not change dynamic", import aborted).
+    assert _servers_row(text) == "ether2,ether3"
+    assert not [l for l in text.splitlines()
+                if l.startswith("set [find where vlan-ids=")]
 
 
 def test_host_ports_on_different_segments(minimal_yml, mutated):
     text = _vlans(load(mutated(minimal_yml, _with_app_server("ether3", segment="iot"))))
     iot_vlan = load(minimal_yml).segments["iot"].vlan_id
     assert f"set [find where interface=ether3] pvid={iot_vlan}" in text
-    assert f"set [find where vlan-ids={iot_vlan}] untagged=ether3" in text
-    assert "set [find where vlan-ids=20] untagged=ether2" in text
+    assert _row_untagged(text, "iot") == "ether3"
+    assert _servers_row(text) == "ether2"
 
 
 def test_host_port_pvid_set_before_vlan_filtering(minimal_yml, mutated):
@@ -140,6 +156,7 @@ def test_segment_render_has_no_port_changes(minimal_yml, mutated):
     cfg = load(mutated(minimal_yml, _with_app_server("ether3")))
     text = render_texts(cfg, None, segment_filter="servers")["01-vlans.rsc"]
     assert "pvid=" not in text
+    assert _servers_row(text) is None       # membership comes with the PVIDs
 
 
 # ─── Revert ──────────────────────────────────────────────────────────────────
