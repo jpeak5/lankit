@@ -84,6 +84,13 @@ class Host:
 
 
 @dataclass
+class DnsHA:
+    vip: str                 # the shared DNS address clients use
+    nodes: list[str]         # host names running Pi-hole, preferred first
+    vrid: int = 53           # VRRP virtual router id
+
+
+@dataclass
 class Privacy:
     query_logging: str       # full | anonymous | none
     query_retention: str     # e.g. "7d"
@@ -124,6 +131,7 @@ class Config:
     portals: dict[str, bool]  # portal name → enabled
     dns_ip: str                # IP handed to devices via DHCP — Pi-hole or public DNS
     tls: Optional[TLS] = None
+    dns_ha: Optional[DnsHA] = None
     # Directory of the network.yml this was loaded from. Site outputs
     # (generated scripts, apply.log) live here, never in the tool.
     config_dir: Optional[Path] = None
@@ -285,8 +293,59 @@ def _validate_cross_references(raw: dict) -> None:
                 f"  hosts.{host_name}.segment: '{host['segment']}' is not a defined segment"
             )
 
+    errors.extend(_dns_ha_errors(raw))
+
     if errors:
         raise ConfigError("Cross-reference errors in network.yml:\n" + "\n".join(errors))
+
+
+def _dns_ha_errors(raw: dict) -> list[str]:
+    """dns_ha must describe a pair that can actually share one address."""
+    import ipaddress
+    ha = raw.get("dns_ha")
+    if not ha:
+        return []
+    errors = []
+    hosts = raw.get("hosts", {})
+    segments = raw.get("segments", {})
+    vip = ha["vip"]
+    node_segments = set()
+    for name in ha["nodes"]:
+        h = hosts.get(name)
+        if not h:
+            errors.append(f"  dns_ha.nodes: '{name}' is not defined in hosts")
+            continue
+        if h.get("enabled", True) is False:
+            errors.append(f"  dns_ha.nodes: '{name}' is disabled (enabled: false)")
+        if "pihole" not in h.get("services", []):
+            errors.append(f"  dns_ha.nodes: '{name}' must list pihole in its services")
+        node_segments.add(h.get("segment"))
+    if len(node_segments) > 1:
+        errors.append("  dns_ha.nodes: all nodes must be on the same segment "
+                      "(the shared address moves between them at layer 2)")
+    for name, h in hosts.items():
+        if h.get("ip") == vip:
+            errors.append(f"  dns_ha.vip: {vip} is hosts.{name}.ip. The shared address "
+                          "must not be any host's own address")
+    if len(node_segments) == 1:
+        seg = segments.get(next(iter(node_segments)))
+        if seg:
+            net = ipaddress.ip_network(seg["subnet"], strict=False)
+            try:
+                addr = ipaddress.ip_address(vip)
+            except ValueError:
+                errors.append(f"  dns_ha.vip: '{vip}' is not an IPv4 address")
+                return errors
+            if addr not in net:
+                errors.append(f"  dns_ha.vip: {vip} is outside the nodes' segment {net}")
+            elif int(addr) - int(net.network_address) >= 10:
+                errors.append(f"  dns_ha.vip: {vip} is inside the DHCP pool (.10 and up); "
+                              "pick an address below .10")
+            elif addr == net.network_address:
+                errors.append(f"  dns_ha.vip: {vip} is the segment's network address")
+            elif addr == net.network_address + 1:
+                errors.append(f"  dns_ha.vip: {vip} is the segment gateway")
+    return errors
 
 
 def _build_config(raw: dict, config_path: Optional[Path] = None) -> Config:
@@ -350,12 +409,20 @@ def _build_config(raw: dict, config_path: Optional[Path] = None) -> Config:
             ca_cert=_resolve_tls_path(tls_raw["ca_cert"]),
         )
 
+    dns_ha = None
+    if ha_raw := raw.get("dns_ha"):
+        dns_ha = DnsHA(vip=ha_raw["vip"], nodes=list(ha_raw["nodes"]),
+                       vrid=ha_raw.get("vrid", 53))
+
     dns_host = hosts.get("dns_server")
-    dns_ip = (
-        dns_host.ip
-        if dns_host and dns_host.enabled
-        else raw["dns_ip"]  # validated present by _validate_cross_references
-    )
+    if dns_ha:
+        dns_ip = dns_ha.vip     # the service address; nodes keep their own ips
+    else:
+        dns_ip = (
+            dns_host.ip
+            if dns_host and dns_host.enabled
+            else raw["dns_ip"]  # validated present by _validate_cross_references
+        )
 
     return Config(
         household_name=raw["household_name"],
@@ -373,6 +440,7 @@ def _build_config(raw: dict, config_path: Optional[Path] = None) -> Config:
         portals=portals,
         dns_ip=dns_ip,
         tls=tls,
+        dns_ha=dns_ha,
         config_dir=(config_path.parent if config_path else Path.cwd()).resolve(),
     )
 

@@ -20,9 +20,11 @@
 # Role defaults (override with --extra-vars):
 #   lankit_dns_headless       — boot the DNS server to console, no desktop (default true)
 #   lankit_dns_watchdog       — restart pihole-FTL when it stops answering (default true)
+#   lankit_dns_ha             — shared DNS address for a Pi-hole pair (from network.yml dns_ha; {} = single host)
+#   lankit_dns_ha_start       — false installs keepalived but leaves it stopped (cutover staging)
 
 - name: Provision DNS server (Pi-hole + Unbound)
-  hosts: dns_server
+  hosts: lankit_dns
   become: yes
   vars:
     lankit_dnssec: "{{ (lankit_dnssec | default('true')) | bool }}"
@@ -31,7 +33,7 @@
     - dns-server
 
 - name: Provision app server (Caddy + portal)
-  hosts: app_server
+  hosts: lankit_apps
   become: yes
   roles:
     - caddy

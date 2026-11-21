@@ -57,6 +57,12 @@ set_nested(config, "dns.upstreams", ["127.0.0.1#5335"])
 set_nested(config, "dns.domainNeeded", True)
 set_nested(config, "dns.expandHosts", True)
 set_nested(config, "dns.interface", "eth0")
+# Answer every segment. Pi-hole's default (LOCAL) only answers devices on a
+# directly attached subnet, and lankit routes every other segment to it.
+set_nested(config, "dns.listeningMode", "ALL")
+# lankit's local names (*.internal) live in /etc/dnsmasq.d/lankit-hosts.conf,
+# which Pi-hole v6 ignores unless told to read dnsmasq.d.
+set_nested(config, "misc.etc_dnsmasq_d", True)
 
 # Privacy level:
 #   0 = full logging (show everything)
@@ -77,6 +83,9 @@ set_nested(config, "database.maxlogage", parse_retention(query_retention))
 
 # Web server port — run behind Caddy
 set_nested(config, "webserver.port", "8081o,[::]:8081o")
+# Caddy serves the dashboard as pihole.<internal domain>; Pi-hole refuses
+# (403) any Host header other than this name or an IP address.
+set_nested(config, "webserver.domain", f"pihole.{internal_domain}")
 
 # Apple Private Relay blocking
 # Pi-hole blocks by adding these domains to the blocklist group

@@ -17,3 +17,9 @@
 - name: reload systemd
   systemd:
     daemon_reload: true
+
+- name: reload keepalived
+  systemd:
+    name: keepalived
+    state: reloaded
+  when: lankit_dns_ha_start | default(true) | bool

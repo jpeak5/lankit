@@ -12,7 +12,8 @@
 http://me.{{ lankit_internal_domain }},
 http://network.{{ lankit_internal_domain }},
 http://apps.{{ lankit_internal_domain }}{% if lankit_portals.get('registration') %},
-http://register.{{ lankit_internal_domain }}{% endif %} {
+http://register.{{ lankit_internal_domain }}{% endif %}{% if lankit_pihole_enabled %},
+http://pihole.{{ lankit_internal_domain }}{% endif %} {
     handle /ca.crt {
         root * /var/www/lankit-portal/apps
         file_server
@@ -58,6 +59,16 @@ register.{{ lankit_internal_domain }} {
 }
 {% endif %}
 
+{% if lankit_pihole_enabled %}
+# Pi-hole dashboard, via the DNS service address: with a DNS pair that is
+# the shared address, so this always reaches the Pi that is serving.
+pihole.{{ lankit_internal_domain }} {
+    tls /etc/lankit-portal/tls/cert.pem /etc/lankit-portal/tls/key.pem
+    redir / /admin/ 302
+    reverse_proxy {{ lankit_dns_server_ip }}:8081
+}
+{% endif %}
+
 {% else %}
 # ── HTTP mode (TLS not configured) ────────────────────────────────────────────
 
@@ -83,6 +94,13 @@ http://register.{{ lankit_internal_domain }} {
     reverse_proxy localhost:5000 {
         header_up X-Real-IP {remote_host}
     }
+}
+{% endif %}
+
+{% if lankit_pihole_enabled %}
+http://pihole.{{ lankit_internal_domain }} {
+    redir / /admin/ 302
+    reverse_proxy {{ lankit_dns_server_ip }}:8081
 }
 {% endif %}
 

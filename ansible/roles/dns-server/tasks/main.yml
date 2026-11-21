@@ -25,6 +25,7 @@
     name: unbound
     state: present
     update_cache: yes
+  register: unbound_pkg
 
 - name: Remove legacy pi-hole.conf (superseded by lankit.conf)
   file:
@@ -41,9 +42,13 @@
     mode: "0644"
   vars:
     dnssec: "{{ lankit_dnssec }}"
+  register: unbound_conf
   notify: restart unbound
 
+# Skipped in --check on a first install: the package (and its directory)
+# isn't really there yet.
 - name: Download root hints for full recursion
+  when: not (ansible_check_mode and unbound_pkg.changed)
   get_url:
     url: https://www.internic.net/domain/named.root
     dest: /var/lib/unbound/root.hints
@@ -52,22 +57,56 @@
     mode: "0644"
     force: no
 
-- name: Configure static IP for DNS server
+# ── Address ───────────────────────────────────────────────────────────────────
+# Each DNS host keeps its own address (ansible_host, from hosts.<name>.ip);
+# with dns_ha the shared address is keepalived's, never configured here.
+# dhcpcd hosts (Raspberry Pi OS up to bullseye) get a static address.
+# NetworkManager hosts (bookworm and later) keep their DHCP lease, which the
+# router pins by MAC; lankit checks it matches instead of rewriting the
+# connection (a wrong rewrite would cut off the host).
+
+- name: Detect the network stack
+  command: systemctl is-active dhcpcd
+  register: dhcpcd_state
+  changed_when: false
+  failed_when: false
+
+- name: Configure static IP (dhcpcd)
+  when: dhcpcd_state.stdout == "active"
   blockinfile:
     path: /etc/dhcpcd.conf
     marker: "# {mark} LANKIT MANAGED — dns-server static IP"
     block: |
       interface eth0
-              static ip_address={{ lankit_dns_server_ip }}/24
+              static ip_address={{ ansible_host }}/24
               static routers={{ lankit_dns_server_gateway }}
               static domain_name_servers=127.0.0.1
   notify: restart dhcpcd
+
+- name: Check the leased address matches network.yml (NetworkManager)
+  when: dhcpcd_state.stdout != "active"
+  assert:
+    that: ansible_host in (ansible_all_ipv4_addresses | default([]))
+    fail_msg: >-
+      {{ inventory_hostname }} doesn't hold {{ ansible_host }}
+      (has {{ ansible_all_ipv4_addresses | default([]) | join(', ') }}).
+      Its address comes from the router's DHCP reservation: run lankit apply,
+      or fix hosts.{{ inventory_hostname }}.ip.
 
 - name: Enable and start Unbound
   systemd:
     name: unbound
     enabled: true
     state: started
+
+# Now, not at the end of the play: a freshly installed unbound listens on
+# port 53 until it reads lankit.conf (port 5335), and the Pi-hole installer
+# below needs 53.
+- name: Restart Unbound onto its lankit config
+  when: unbound_conf.changed
+  systemd:
+    name: unbound
+    state: restarted
 
 # ── Pi-hole ───────────────────────────────────────────────────────────────────
 
@@ -111,6 +150,11 @@
       command: bash /tmp/pihole-install.sh --unattended
       environment:
         PIHOLE_SKIP_OS_CHECK: "true"
+
+- name: Install the config script's TOML library
+  apt:
+    name: python3-toml
+    state: present
 
 - name: Copy Pi-hole configuration script
   copy:
@@ -290,4 +334,95 @@
         - /etc/systemd/system/lankit-dns-watchdog.timer
         - /etc/systemd/system/lankit-dns-watchdog.service
         - /usr/local/sbin/lankit-dns-watchdog
+      notify: reload systemd
+
+# ── Shared address (dns_ha) ───────────────────────────────────────────────────
+# With dns_ha in network.yml, keepalived (VRRP, unicast between the nodes)
+# holds the shared DNS address on whichever node is healthy, preferring the
+# first listed. A node whose Pi-hole or unbound stops answering gives the
+# address up within ~4 s. Logs: journalctl -u keepalived
+
+- name: Shared DNS address (keepalived)
+  tags: [dns-ha]
+  when: lankit_dns_ha | length > 0
+  block:
+    - name: Install keepalived and dig
+      apt:
+        name: [keepalived, bind9-dnsutils]
+        state: present
+
+    - name: Install the health check
+      copy:
+        src: lankit-dns-check.sh
+        dest: /usr/local/sbin/lankit-dns-check
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure keepalived
+      template:
+        src: keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: reload keepalived
+
+    - name: keepalived drop-in directory
+      file:
+        path: /etc/systemd/system/keepalived.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Start keepalived after Pi-hole
+      copy:
+        dest: /etc/systemd/system/keepalived.service.d/lankit.conf
+        content: |
+          # Installed by lankit's dns-server role.
+          [Unit]
+          After=pihole-FTL.service unbound.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: reload systemd
+
+    - name: Enable and start keepalived
+      systemd:
+        name: keepalived
+        enabled: "{{ lankit_dns_ha_start | default(true) | bool }}"
+        state: "{{ 'started' if (lankit_dns_ha_start | default(true) | bool) else 'stopped' }}"
+
+# dns_ha removed from network.yml: stop the keepalived lankit installed, or
+# the old master keeps holding the shared address. Apply the router change
+# (DHCP hands out the node's own address again) before this, or clients
+# still pointed at the shared address lose DNS until it lands.
+- name: No shared DNS address (dns_ha unset)
+  tags: [dns-ha]
+  when: lankit_dns_ha | length == 0
+  block:
+    - name: Is keepalived lankit's?
+      command: grep -q "Installed by lankit" /etc/keepalived/keepalived.conf
+      register: lankit_keepalived
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Stop and disable keepalived
+      systemd:
+        name: keepalived
+        state: stopped
+        enabled: false
+      when: lankit_keepalived.rc == 0
+
+    - name: Remove lankit's keepalived files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/keepalived/keepalived.conf
+        - /etc/systemd/system/keepalived.service.d/lankit.conf
+        - /usr/local/sbin/lankit-dns-check
+      when: lankit_keepalived.rc == 0
       notify: reload systemd

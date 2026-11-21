@@ -1,0 +1,46 @@
+# Installed by lankit's dns-server role, from network.yml's dns_ha block.
+# Edit network.yml and run lankit provision, not this file.
+{% set me = lankit_dns_ha.nodes | selectattr('name', 'equalto', inventory_hostname) | first %}
+{% set peers = lankit_dns_ha.nodes | rejectattr('name', 'equalto', inventory_hostname) | list %}
+
+global_defs {
+    router_id {{ inventory_hostname }}
+    enable_script_security
+    script_user nobody nogroup
+    # Re-announce the address every minute, so the router's ARP entry can't
+    # go stale on the wrong node.
+    vrrp_garp_master_refresh 60
+}
+
+vrrp_script lankit_dns_check {
+    script "/usr/local/sbin/lankit-dns-check"
+    interval 2
+    timeout 2
+    fall 2          # two failed checks (~4 s): give the address up
+    rise 2
+    # Start as failed: a node that has just booted must pass two checks
+    # before it can take the address, so the preferred node can't preempt
+    # its peer while its own Pi-hole is still starting.
+    init_fail
+}
+
+vrrp_instance lankit_dns {
+    state BACKUP    # both start as backup; priority decides who holds the address
+    interface {{ ansible_default_ipv4.interface | default('eth0') }}
+    virtual_router_id {{ lankit_dns_ha.vrid }}
+    priority {{ me.priority }}
+    advert_int 1
+    # Unicast between the nodes: no reliance on multicast across the bridge.
+    unicast_src_ip {{ me.ip }}
+    unicast_peer {
+{% for p in peers %}
+        {{ p.ip }}
+{% endfor %}
+    }
+    virtual_ipaddress {
+        {{ lankit_dns_ha.vip }}/{{ lankit_dns_ha.prefix }} dev {{ ansible_default_ipv4.interface | default('eth0') }}
+    }
+    track_script {
+        lankit_dns_check
+    }
+}

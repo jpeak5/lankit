@@ -72,11 +72,14 @@ def provision(config_path, host, tags, check, verbose):
 
     # Map services to Ansible groups — supports single-box (all services on one host)
     # and multi-box (concerns separated by hardware) equally.
+    # Group names must differ from host names: when a group and a host share a
+    # name, Ansible resolves "hosts: <name>" to the host alone, so a second
+    # DNS node would silently be skipped.
     _SERVICE_GROUP = {
-        "pihole":  "dns_server",
-        "unbound": "dns_server",
-        "caddy":   "app_server",
-        "portal":  "app_server",
+        "pihole":  "lankit_dns",
+        "unbound": "lankit_dns",
+        "caddy":   "lankit_apps",
+        "portal":  "lankit_apps",
     }
 
     ssh_key = str(Path(cfg.ssh_key).expanduser())
@@ -125,6 +128,7 @@ def provision(config_path, host, tags, check, verbose):
         "lankit_tls_cert":          cfg.tls.cert    if cfg.tls else "",
         "lankit_tls_key":           cfg.tls.key     if cfg.tls else "",
         "lankit_tls_ca_cert":       cfg.tls.ca_cert if cfg.tls else "",
+        "lankit_dns_ha":            _dns_ha_vars(cfg),
     }
 
     # Extra-vars carry secrets (the Pi-hole password), so they go in a
@@ -163,6 +167,26 @@ def provision(config_path, host, tags, check, verbose):
             raise SystemExit(result.returncode)
 
 
+def _dns_ha_vars(cfg) -> dict:
+    """keepalived's view of dns_ha: the shared address and each node's own
+    address and priority (first listed = highest). {} when dns_ha is unset."""
+    import ipaddress
+    ha = cfg.dns_ha
+    if not ha:
+        return {}
+    seg = cfg.segments[cfg.hosts[ha.nodes[0]].segment]
+    prefix = ipaddress.ip_network(seg.subnet, strict=False).prefixlen
+    return {
+        "vip": ha.vip,
+        "prefix": prefix,
+        "vrid": ha.vrid,
+        "nodes": [
+            {"name": name, "ip": cfg.hosts[name].ip, "priority": 150 - 50 * i}
+            for i, name in enumerate(ha.nodes)
+        ],
+    }
+
+
 def _dns_gateway(cfg) -> str:
     import ipaddress
     dns = cfg.hosts.get("dns_server")
@@ -190,16 +214,24 @@ def _build_dns_hosts(cfg) -> list[str]:
     # Segment gateways
     for name, seg in cfg.segments.items():
         lines.append(f"{seg.gateway} {name}.{domain}")
-    # Named hosts (use FQDN)
+    # Named hosts (use FQDN). The DNS server's name is the DNS *service*, so
+    # with a pair it follows the shared address, not one Pi.
     for name, h in cfg.hosts.items():
         if h.enabled:
-            lines.append(f"{h.ip} {h.hostname}.{domain}")
+            ip = cfg.dns_ip if (name == "dns_server" and cfg.dns_ha) else h.ip
+            lines.append(f"{ip} {h.hostname}.{domain}")
     # Portal subdomains — each enabled portal gets its own DNS name on app_server
     app = cfg.hosts.get("app_server")
     if app and app.enabled:
         for portal, subdomain in _PORTAL_SUBDOMAINS.items():
             if cfg.portals.get(portal):
                 lines.append(f"{app.ip} {subdomain}.{domain}")
+        # The Pi-hole dashboard is served by Caddy on the app server.
+        # Skipped if a host is itself named "pihole": its own record wins.
+        dns = cfg.hosts.get("dns_server")
+        named_pihole = any(h.hostname == "pihole" for h in cfg.hosts.values() if h.enabled)
+        if dns and dns.enabled and not named_pihole:
+            lines.append(f"{app.ip} pihole.{domain}")
     return lines
 
 

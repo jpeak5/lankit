@@ -6,3 +6,8 @@ lankit_dns_headless: true
 # Restart pihole-FTL when it is running but stops answering DNS (checked
 # every minute). Set false to leave FTL alone.
 lankit_dns_watchdog: true
+
+# The shared DNS address, set by lankit provision from network.yml's dns_ha
+# block: {vip, prefix, vrid, nodes: [{name, ip, priority}]}. Empty = one DNS
+# host, no keepalived.
+lankit_dns_ha: {}
