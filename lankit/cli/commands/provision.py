@@ -125,6 +125,7 @@ def provision(config_path, host, tags, check, verbose):
         "lankit_tls_cert":          cfg.tls.cert    if cfg.tls else "",
         "lankit_tls_key":           cfg.tls.key     if cfg.tls else "",
         "lankit_tls_ca_cert":       cfg.tls.ca_cert if cfg.tls else "",
+        "lankit_dns_ha":            _dns_ha_vars(cfg),
     }
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".ini", delete=False) as inv_f:
@@ -161,6 +162,26 @@ def provision(config_path, host, tags, check, verbose):
     finally:
         os.unlink(inv_path)
         os.unlink(vars_path)
+
+
+def _dns_ha_vars(cfg) -> dict:
+    """keepalived's view of dns_ha: the shared address and each node's own
+    address and priority (first listed = highest). {} when dns_ha is unset."""
+    import ipaddress
+    ha = cfg.dns_ha
+    if not ha:
+        return {}
+    seg = cfg.segments[cfg.hosts[ha.nodes[0]].segment]
+    prefix = ipaddress.ip_network(seg.subnet, strict=False).prefixlen
+    return {
+        "vip": ha.vip,
+        "prefix": prefix,
+        "vrid": ha.vrid,
+        "nodes": [
+            {"name": name, "ip": cfg.hosts[name].ip, "priority": 150 - 50 * i}
+            for i, name in enumerate(ha.nodes)
+        ],
+    }
 
 
 def _dns_gateway(cfg) -> str:

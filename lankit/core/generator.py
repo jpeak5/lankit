@@ -211,6 +211,9 @@ def _build_context(
         "household_name":     cfg.household_name,
         "internal_domain":    cfg.internal_domain,
         "dns_server_ip":      cfg.dns_ip,
+        # The service address (dns_server_ip) is the shared VIP when
+        # dns_ha is set; the host's own address is what its lease pins.
+        "dns_server_host_ip": dns.ip      if dns else None,
         "dns_server_mac":     dns.mac     if dns else None,
         "dns_server_segment": dns.segment if dns else None,
         "dns_server_vlan_id": cfg.segments[dns.segment].vlan_id if dns else None,

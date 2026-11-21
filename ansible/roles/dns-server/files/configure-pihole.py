@@ -57,6 +57,9 @@ set_nested(config, "dns.upstreams", ["127.0.0.1#5335"])
 set_nested(config, "dns.domainNeeded", True)
 set_nested(config, "dns.expandHosts", True)
 set_nested(config, "dns.interface", "eth0")
+# Answer every segment. Pi-hole's default (LOCAL) only answers devices on a
+# directly attached subnet, and lankit routes every other segment to it.
+set_nested(config, "dns.listeningMode", "ALL")
 
 # Privacy level:
 #   0 = full logging (show everything)

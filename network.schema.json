@@ -19,18 +19,15 @@
   ],
   "additionalProperties": false,
   "properties": {
-
     "household_name": {
       "type": "string",
       "minLength": 1,
       "description": "Household name used in SSIDs and internal hostnames"
     },
-
     "internal_domain": {
       "type": "string",
       "const": "internal"
     },
-
     "segments": {
       "type": "object",
       "minProperties": 1,
@@ -38,22 +35,29 @@
         "$ref": "#/$defs/segment"
       }
     },
-
     "permissions": {
       "type": "object",
       "additionalProperties": {
         "$ref": "#/$defs/permission"
       }
     },
-
     "privacy": {
       "type": "object",
-      "required": ["query_logging", "query_retention", "dashboard_visibility", "apple_private_relay"],
+      "required": [
+        "query_logging",
+        "query_retention",
+        "dashboard_visibility",
+        "apple_private_relay"
+      ],
       "additionalProperties": false,
       "properties": {
         "query_logging": {
           "type": "string",
-          "enum": ["full", "anonymous", "none"],
+          "enum": [
+            "full",
+            "anonymous",
+            "none"
+          ],
           "description": "CHOOSE: full | anonymous | none"
         },
         "query_retention": {
@@ -63,159 +67,308 @@
         },
         "dashboard_visibility": {
           "type": "string",
-          "enum": ["admin_only", "household", "per_device"]
+          "enum": [
+            "admin_only",
+            "household",
+            "per_device"
+          ]
         },
         "apple_private_relay": {
           "type": "string",
-          "enum": ["allow", "block"]
+          "enum": [
+            "allow",
+            "block"
+          ]
         }
       }
     },
-
     "wifi_password_source": {
       "type": "string",
-      "enum": ["vault", "env", "prompt"]
+      "enum": [
+        "vault",
+        "env",
+        "prompt"
+      ]
     },
-
     "vpn": {
       "type": "string",
-      "enum": ["wireguard", "ipsec", "none"],
-      "description": "Remote-access VPN choice. Not yet implemented for wireguard/ipsec (tracked in GitHub issue #12) — choose 'none' until support lands."
+      "enum": [
+        "wireguard",
+        "ipsec",
+        "none"
+      ],
+      "description": "Remote-access VPN choice. Not yet implemented for wireguard/ipsec (tracked in GitHub issue #12) \u2014 choose 'none' until support lands."
     },
-
     "dnssec": {
       "type": "boolean"
     },
-
     "dns_ip": {
       "type": "string",
       "description": "DNS IP handed to devices via DHCP. Inferred from hosts.dns_server.ip when a Pi-hole host is configured; required otherwise (e.g. '1.1.1.1' or '8.8.8.8')."
     },
-
     "hosts": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "dns_server": { "$ref": "#/$defs/host" },
-        "app_server": { "$ref": "#/$defs/host" }
+        "dns_server": {
+          "$ref": "#/$defs/host"
+        },
+        "app_server": {
+          "$ref": "#/$defs/host"
+        }
       }
     },
-
+    "dns_ha": {
+      "type": "object",
+      "description": "Run Pi-hole on two hosts with one shared address (keepalived/VRRP). Clients, DHCP, the forced-DNS redirect and the firewall see only vip; each node keeps its own hosts.<name>.ip.",
+      "required": [
+        "vip",
+        "nodes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "vip": {
+          "type": "string",
+          "format": "ipv4",
+          "description": "The shared DNS address. Must be in the nodes' segment, outside the DHCP pool, and not any host's own ip."
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "dns_server",
+              "app_server"
+            ]
+          },
+          "minItems": 2,
+          "uniqueItems": true,
+          "description": "Hosts that run Pi-hole, preferred first."
+        },
+        "vrid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255,
+          "description": "VRRP virtual router id (default 53). Change only if another VRRP group on the segment uses 53."
+        }
+      }
+    },
     "portals": {
       "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/portal" }
+      "additionalProperties": {
+        "$ref": "#/$defs/portal"
+      }
     },
-
     "tls": {
       "type": "object",
-      "required": ["cert", "key", "ca_cert"],
+      "required": [
+        "cert",
+        "key",
+        "ca_cert"
+      ],
       "additionalProperties": false,
       "properties": {
-        "cert":    { "type": "string" },
-        "key":     { "type": "string" },
-        "ca_cert": { "type": "string" }
+        "cert": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "ca_cert": {
+          "type": "string"
+        }
       }
     },
-
     "router": {
       "type": "object",
-      "required": ["ip", "ssh_user", "ssh_key", "wan_interface", "lan_interface"],
+      "required": [
+        "ip",
+        "ssh_user",
+        "ssh_key",
+        "wan_interface",
+        "lan_interface"
+      ],
       "additionalProperties": false,
       "properties": {
-        "ip":            { "type": "string", "format": "ipv4" },
-        "ssh_user":      { "type": "string" },
-        "ssh_key":       { "type": "string" },
-        "wan_interface": { "type": "string" },
-        "lan_interface": { "type": "string" }
+        "ip": {
+          "type": "string",
+          "format": "ipv4"
+        },
+        "ssh_user": {
+          "type": "string"
+        },
+        "ssh_key": {
+          "type": "string"
+        },
+        "wan_interface": {
+          "type": "string"
+        },
+        "lan_interface": {
+          "type": "string"
+        }
       }
     },
-
     "failsafe_seconds": {
       "type": "integer",
       "minimum": 30,
       "maximum": 600
     },
-
     "ssh_key": {
       "type": "string",
       "minLength": 1
     }
   },
-
   "$defs": {
-
     "segment": {
       "type": "object",
       "required": [
-        "vlan_id", "comment", "subnet",
-        "ssid", "wifi_bands", "ssid_hidden",
-        "bandwidth_up", "bandwidth_down",
-        "dns", "force_dns", "internet", "client_isolation"
+        "vlan_id",
+        "comment",
+        "subnet",
+        "ssid",
+        "wifi_bands",
+        "ssid_hidden",
+        "bandwidth_up",
+        "bandwidth_down",
+        "dns",
+        "force_dns",
+        "internet",
+        "client_isolation"
       ],
       "additionalProperties": false,
       "properties": {
-        "vlan_id":        { "type": "integer", "minimum": 1, "maximum": 4094 },
-        "comment":        { "type": "string" },
-        "subnet":         { "type": "string" },
-        "ssid":           { "type": ["string", "null"] },
+        "vlan_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4094
+        },
+        "comment": {
+          "type": "string"
+        },
+        "subnet": {
+          "type": "string"
+        },
+        "ssid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "wifi_bands": {
           "type": "array",
-          "items": { "type": "string", "enum": ["2ghz", "5ghz"] },
+          "items": {
+            "type": "string",
+            "enum": [
+              "2ghz",
+              "5ghz"
+            ]
+          },
           "uniqueItems": true
         },
-        "ssid_hidden":    { "type": "boolean" },
-        "bandwidth_up":   { "type": ["string", "null"], "pattern": "^[0-9]+(M|G)$" },
-        "bandwidth_down": { "type": ["string", "null"], "pattern": "^[0-9]+(M|G)$" },
+        "ssid_hidden": {
+          "type": "boolean"
+        },
+        "bandwidth_up": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]+(M|G)$"
+        },
+        "bandwidth_down": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]+(M|G)$"
+        },
         "dns": {
           "type": "string",
-          "enum": ["filtered", "unfiltered", "none"]
+          "enum": [
+            "filtered",
+            "unfiltered",
+            "none"
+          ]
         },
-        "force_dns":        { "type": "boolean" },
+        "force_dns": {
+          "type": "boolean"
+        },
         "internet": {
           "type": "string",
-          "enum": ["full", "egress_only", "none"]
+          "enum": [
+            "full",
+            "egress_only",
+            "none"
+          ]
         },
-        "client_isolation": { "type": "boolean" }
+        "client_isolation": {
+          "type": "boolean"
+        }
       }
     },
-
     "permission": {
       "type": "object",
-      "required": ["can_reach"],
+      "required": [
+        "can_reach"
+      ],
       "additionalProperties": false,
       "properties": {
         "can_reach": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "uniqueItems": true
         }
       }
     },
-
     "host": {
       "type": "object",
-      "required": ["hostname", "segment", "ip", "mac", "services"],
+      "required": [
+        "hostname",
+        "segment",
+        "ip",
+        "mac",
+        "services"
+      ],
       "additionalProperties": false,
       "properties": {
-        "hostname": { "type": "string" },
-        "segment":  { "type": "string" },
-        "ip":       { "type": "string", "format": "ipv4" },
-        "mac":      { "type": "string" },
+        "hostname": {
+          "type": "string"
+        },
+        "segment": {
+          "type": "string"
+        },
+        "ip": {
+          "type": "string",
+          "format": "ipv4"
+        },
+        "mac": {
+          "type": "string"
+        },
         "services": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
-        "ssh_user": { "type": "string" },
-        "enabled":  { "type": "boolean" }
+        "ssh_user": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
       }
     },
-
     "portal": {
       "type": "object",
-      "required": ["enabled"],
+      "required": [
+        "enabled"
+      ],
       "additionalProperties": false,
       "properties": {
-        "enabled": { "type": "boolean" }
+        "enabled": {
+          "type": "boolean"
+        }
       }
     }
   }
