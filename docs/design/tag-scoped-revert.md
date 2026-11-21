@@ -128,6 +128,8 @@ These carry no `lankit:` comment; the remove-pass generator emits explicit resto
 | Master WiFi hide/rename (04: `wifi1`/`wifi2` → `_master-*-noconnect`, hidden) | restore captured `configuration.ssid` / `hide-ssid` values | captured live by the **caller** at bundle-generation time (apply reads two fields over the existing connection and passes them in); if capture fails, omit the block and warn — masters stay hidden, wired path unaffected |
 | defconf fasttrack disable (future, G3.7) | `enable [find where comment="defconf: fasttrack" && disabled=yes]` | constant; only emitted once G3.7 lands. G3.7 must not tag the defconf rule with `lankit:` (the remove-pass would try to delete a defconf rule); it disables it and this design re-enables it. |
 
+**Host ports and the revert target.** The rebuild restores the *archived* port layout, not the current `network.yml`'s. A port that is a host port now but wasn't in the archived state ends on PVID 1, which is where the archived state had it. The first apply after adding `port:` is the case that matters: when it reverts, a host whose port had been hand-set to its segment lands on the flat VLAN. That matches the pre-`port:` behaviour. The router's management path is unaffected, but the host is off its segment until the next successful apply or a hand fix. On a router with no archive (first apply), a remove-only revert flattens every port anyway (§4).
+
 `revert.py` stays pure generation: all live-read inputs (master-WiFi capture) are parameters supplied by the caller, per the G1.2 no-router-I/O rule.
 
 ### 5.4 Why the management path survives at every intermediate point

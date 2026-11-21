@@ -72,6 +72,12 @@ class Permission:
     can_reach: list[str]
 
 
+# LAN ports lankit keeps on the flat VLAN 1 when no host is wired to them
+# (hAP ax³/ac numbering; ether2 is the historical DNS-server port). Used by
+# the 01-vlans render and the revert's PVID restore, which must agree.
+FLAT_LAN_PORTS = ("ether3", "ether4", "ether5")
+
+
 @dataclass
 class Host:
     hostname: str

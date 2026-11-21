@@ -15,7 +15,7 @@ from typing import Iterable, Optional, Union
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from lankit.core.config import Config
+from lankit.core.config import FLAT_LAN_PORTS, Config
 
 _TEMPLATES_DIR = Path(__file__).parent.parent.parent / "ansible" / "roles" / "router" / "templates"
 def generated_dir(cfg: Config) -> Path:
@@ -133,15 +133,21 @@ def generate_one(
     return output_path
 
 
-# LAN ports 01-vlans keeps on the flat VLAN 1 (hAP ax³/ac numbering), less
-# any that a host is wired to. ether2 is the historical DNS-server port.
-_FLAT_PORTS = ("ether3", "ether4", "ether5")
+# 01-vlans keeps these on the flat VLAN 1, less any a host is wired to.
+_FLAT_PORTS = FLAT_LAN_PORTS
 
 
-def _host_port_vlans(cfg: Config) -> dict[int, list[str]]:
-    """{vlan_id: [ports]} for host ports, ports sorted, VLANs ascending."""
+def _host_port_vlans(cfg: Config, segments: dict) -> dict[int, list[str]]:
+    """{vlan_id: [ports]} for host ports, ports sorted, VLANs ascending.
+
+    Only segments in this render: the global remove takes out every lankit
+    bridge-vlan row and re-adds only the rendered ones, so a host port on a
+    segment outside the render would get a PVID with no VLAN row behind it
+    and be cut off. Such a port is left as it is instead."""
     out: dict[int, list[str]] = {}
     for port, seg in cfg.host_ports().items():
+        if seg not in segments:
+            continue
         out.setdefault(cfg.segments[seg].vlan_id, []).append(port)
     return {v: sorted(ps) for v, ps in sorted(out.items())}
 
@@ -238,7 +244,7 @@ def _build_context(
         "lan_interface":      cfg.router.lan_interface,
         # Ports with a host wired straight to them become untagged access
         # ports on its segment; every other LAN port stays on the flat VLAN.
-        "host_port_vlans":    _host_port_vlans(cfg),
+        "host_port_vlans":    _host_port_vlans(cfg, segments),
         "flat_ports":         [p for p in _FLAT_PORTS if p not in cfg.host_ports()],
         "wifi_passphrases":   wifi_passphrases,
     }

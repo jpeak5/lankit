@@ -192,3 +192,67 @@ def test_ports_to_restore_union_of_config_and_archive(minimal_yml, mutated):
 def test_revert_bundle_passes_host_ports_through():
     bundle = revert.build_revert_bundle(None, "ether2", host_ports=["ether8"])
     assert "set [find where interface=ether8] pvid=1" in bundle
+
+
+def test_host_port_outside_rendered_segments_left_alone(minimal_yml, mutated):
+    # Archive re-renders may pass a segment subset with include_globals=True.
+    # The global remove drops every lankit VLAN row, so a host port on a
+    # segment outside the render must not get a PVID with no row behind it.
+    cfg = load(mutated(minimal_yml, _with_app_server("ether3")))
+    text = render_texts(cfg, None, segment_filter={"trusted", "iot"},
+                        include_globals=True)["01-vlans.rsc"]
+    assert "pvid=20" not in text
+    assert "vlan-ids=20" not in text
+    assert "untagged=ether4,ether5" in text      # still off the flat VLAN
+
+
+def test_flat_ports_shared_by_render_and_revert(cfg):
+    from lankit.core.config import FLAT_LAN_PORTS
+    text = revert.build_remove_pass("ether2")
+    assert "{" + ";".join(f'"{p}"' for p in FLAT_LAN_PORTS) + "}" in text
+
+
+# ─── apply pre-flight: host ports must be bridge ports ───────────────────────
+
+from rich.console import Console
+
+from lankit.cli.commands.apply import _check_host_ports
+
+_BRIDGE = (
+    "0 comment=defconf interface=ether2 bridge=bridge pvid=40\n"
+    "1 comment=defconf interface=ether3 bridge=bridge pvid=1\n"
+    "2 comment=defconf interface=ether4 bridge=bridge pvid=1\n"
+)
+
+
+class _Conn:
+    def __init__(self, out, err=""):
+        self.out, self.err = out, err
+
+    def run_tolerant(self, cmd):
+        assert cmd == "/interface bridge port print terse where bridge=bridge"
+        return self.out, self.err
+
+
+def test_preflight_passes_when_host_ports_are_bridge_ports(minimal_yml, mutated):
+    cfg = load(mutated(minimal_yml, _with_app_server("ether3")))
+    _check_host_ports(_Conn(_BRIDGE), cfg, Console(record=True))
+
+
+def test_preflight_refuses_unknown_port(minimal_yml, mutated):
+    # A typo'd name in untagged= aborts the import mid-script (RouterOS
+    # 7.24.2: "input does not match any value of interface").
+    cfg = load(mutated(minimal_yml, _with_app_server("ether9")))
+    console = Console(record=True, width=200)
+    with pytest.raises(SystemExit) as exc:
+        _check_host_ports(_Conn(_BRIDGE), cfg, console)
+    assert exc.value.code == 1
+    out = console.export_text()
+    assert "ether9" in out and "Nothing has been changed" in out
+
+
+def test_preflight_continues_when_bridge_unreadable(minimal_yml, mutated):
+    cfg = load(mutated(minimal_yml, _with_app_server("ether9")))
+    console = Console(record=True)
+    _check_host_ports(_Conn("", "failure"), cfg, console)
+    assert "continuing" in console.export_text()

@@ -416,6 +416,8 @@ def apply(config_path, no_generate, dry_run, script, segment, skip_probe, strict
             _check_failsafe_fired_marker(conn, console)
             _preflight_router(conn, console, version)
             _check_untagged(conn, [s.read_text() for s in scripts], console)
+            if segment is None and any(s.name == "01-vlans.rsc" for s in scripts):
+                _check_host_ports(conn, cfg, console)
 
             # ── Global-rule pre-flight (G3.3) ──────────────────────────────────
             # A --segment apply brings up that segment's VLAN, DHCP and WiFi
@@ -789,6 +791,37 @@ def _migration_bootstrap(conn, cfg, wifi_passphrases, segment, network_yml_hash,
     console.print("  Run [bold]lankit probe[/bold] first to see exactly what differs, or:")
     _confirm_remove_only_failsafe(console)
     return None
+
+
+def _check_host_ports(conn, cfg, console) -> None:
+    """Refuse if a host port isn't a port of the bridge.
+
+    01-vlans names each host port in `untagged=`; a name RouterOS doesn't
+    know aborts the import there, after the VLAN rows were removed and
+    before filtering is back on, leaving the router to the failsafe. A real
+    interface that isn't a bridge port does nothing at all, so the host
+    silently stays where it was. Both are caught before anything changes.
+    """
+    import re
+
+    wanted = sorted(cfg.host_ports())
+    if not wanted:
+        return
+    out, err = conn.run_tolerant("/interface bridge port print terse where bridge=bridge")
+    if err.strip() or not out.strip():
+        console.print("  [dim]Could not read the bridge ports to check the host ports — "
+                      "continuing.[/dim]")
+        return
+    on_bridge = set(re.findall(r"(?:^|\s)interface=(\S+)", out))
+    missing = [p for p in wanted if p not in on_bridge]
+    if missing:
+        console.print()
+        console.print("[bold red]Refusing to apply:[/bold red] these host ports are not ports "
+                      "of the router's bridge: " + ", ".join(f"[bold]{p}[/bold]" for p in missing))
+        console.print(f"  Bridge ports: {', '.join(sorted(on_bridge)) or 'none'}")
+        console.print("  Fix hosts.<name>.port (or router.lan_interface for the DNS server) in "
+                      "network.yml. Nothing has been changed.")
+        raise SystemExit(1)
 
 
 def _check_untagged(conn, script_texts, console) -> None:

@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional
 
-from lankit.core.config import Config
+from lankit.core.config import FLAT_LAN_PORTS, Config
 
 # ─── RouterOS output parsing ────────────────────────────────────────────────
 #
@@ -257,7 +257,7 @@ class MasterWifiFacts:
 
 
 # LAN ports the remove-pass always returns to PVID 1 (01-vlans' flat set).
-_FLAT_PORTS = ("ether3", "ether4", "ether5")
+_FLAT_PORTS = FLAT_LAN_PORTS
 
 
 def host_ports_to_restore(cfg: Config, archive: Optional["KnownGoodArchive"]) -> list[str]:
@@ -353,7 +353,7 @@ def build_remove_pass(
         f'on-error={{ :log warning "lankit-revert: dns-server-port pvid restore failed" }}'
     )
     lines.append(
-        ':do { :foreach p in={"ether3";"ether4";"ether5"} do={ '
+        ':do { :foreach p in={' + ';'.join(f'"{p}"' for p in _FLAT_PORTS) + '} do={ '
         '/interface bridge port set [find where interface=$p] pvid=1 } } '
         'on-error={ :log warning "lankit-revert: ether3-5 pvid restore failed" }'
     )
