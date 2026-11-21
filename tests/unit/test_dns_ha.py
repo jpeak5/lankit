@@ -198,3 +198,17 @@ def test_no_dashboard_record_when_a_host_is_named_pihole(cfg):
     # The minimal fixture's DNS host is called "pihole": its own record stands.
     hosts = [h for h in _build_dns_hosts(cfg) if h.endswith(" pihole.internal")]
     assert hosts == [f"{cfg.hosts['dns_server'].ip} pihole.internal"]
+
+
+def test_post_apply_probe_asks_the_shared_address(pair_cfg):
+    # The shared address can be on the other node and another router port;
+    # the DNS server's own address answering proves nothing for clients.
+    from lankit.cli.commands.apply import _probe_plan
+    _, dns_ip = _probe_plan(pair_cfg, None)
+    assert dns_ip == "10.20.0.2"
+
+
+def test_post_apply_probe_without_pair_asks_the_host(cfg):
+    from lankit.cli.commands.apply import _probe_plan
+    _, dns_ip = _probe_plan(cfg, None)
+    assert dns_ip == cfg.hosts["dns_server"].ip
