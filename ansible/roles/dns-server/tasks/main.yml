@@ -25,6 +25,7 @@
     name: unbound
     state: present
     update_cache: yes
+  register: unbound_pkg
 
 - name: Remove legacy pi-hole.conf (superseded by lankit.conf)
   file:
@@ -44,7 +45,10 @@
   register: unbound_conf
   notify: restart unbound
 
+# Skipped in --check on a first install: the package (and its directory)
+# isn't really there yet.
 - name: Download root hints for full recursion
+  when: not (ansible_check_mode and unbound_pkg.changed)
   get_url:
     url: https://www.internic.net/domain/named.root
     dest: /var/lib/unbound/root.hints
@@ -136,22 +140,6 @@
         dest: /etc/pihole/setupVars.conf
         mode: "0644"
 
-    # Pre-seed the settings a first start needs, so FTL never tries port 80
-    # (Caddy's, when the host also serves apps) and answers every segment
-    # from the start. configure-pihole.py owns these afterwards.
-    - name: Pre-seed pihole.toml for a first start
-      copy:
-        dest: /etc/pihole/pihole.toml
-        force: false
-        mode: "0644"
-        content: |
-          [dns]
-            upstreams = ["127.0.0.1#5335"]
-            interface = "eth0"
-            listeningMode = "ALL"
-          [webserver]
-            port = "8081o,[::]:8081o"
-
     - name: Download Pi-hole installer
       get_url:
         url: https://install.pi-hole.net
@@ -162,6 +150,11 @@
       command: bash /tmp/pihole-install.sh --unattended
       environment:
         PIHOLE_SKIP_OS_CHECK: "true"
+
+- name: Install the config script's TOML library
+  apt:
+    name: python3-toml
+    state: present
 
 - name: Copy Pi-hole configuration script
   copy:
@@ -351,7 +344,7 @@
 
 - name: Shared DNS address (keepalived)
   tags: [dns-ha]
-  when: lankit_dns_ha
+  when: lankit_dns_ha | length > 0
   block:
     - name: Install keepalived and dig
       apt:
