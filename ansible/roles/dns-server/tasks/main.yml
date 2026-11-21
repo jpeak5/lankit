@@ -339,8 +339,8 @@
 # ── Shared address (dns_ha) ───────────────────────────────────────────────────
 # With dns_ha in network.yml, keepalived (VRRP, unicast between the nodes)
 # holds the shared DNS address on whichever node is healthy, preferring the
-# first listed. A node whose Pi-hole stops answering gives the address up
-# within ~4 s. Logs: journalctl -u keepalived
+# first listed. A node whose Pi-hole or unbound stops answering gives the
+# address up within ~4 s. Logs: journalctl -u keepalived
 
 - name: Shared DNS address (keepalived)
   tags: [dns-ha]
@@ -368,8 +368,61 @@
         mode: "0644"
       notify: reload keepalived
 
+    - name: keepalived drop-in directory
+      file:
+        path: /etc/systemd/system/keepalived.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Start keepalived after Pi-hole
+      copy:
+        dest: /etc/systemd/system/keepalived.service.d/lankit.conf
+        content: |
+          # Installed by lankit's dns-server role.
+          [Unit]
+          After=pihole-FTL.service unbound.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify: reload systemd
+
     - name: Enable and start keepalived
       systemd:
         name: keepalived
         enabled: "{{ lankit_dns_ha_start | default(true) | bool }}"
         state: "{{ 'started' if (lankit_dns_ha_start | default(true) | bool) else 'stopped' }}"
+
+# dns_ha removed from network.yml: stop the keepalived lankit installed, or
+# the old master keeps holding the shared address. Apply the router change
+# (DHCP hands out the node's own address again) before this, or clients
+# still pointed at the shared address lose DNS until it lands.
+- name: No shared DNS address (dns_ha unset)
+  tags: [dns-ha]
+  when: lankit_dns_ha | length == 0
+  block:
+    - name: Is keepalived lankit's?
+      command: grep -q "Installed by lankit" /etc/keepalived/keepalived.conf
+      register: lankit_keepalived
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Stop and disable keepalived
+      systemd:
+        name: keepalived
+        state: stopped
+        enabled: false
+      when: lankit_keepalived.rc == 0
+
+    - name: Remove lankit's keepalived files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/keepalived/keepalived.conf
+        - /etc/systemd/system/keepalived.service.d/lankit.conf
+        - /usr/local/sbin/lankit-dns-check
+      when: lankit_keepalived.rc == 0
+      notify: reload systemd
