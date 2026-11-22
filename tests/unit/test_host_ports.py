@@ -273,3 +273,16 @@ def test_preflight_continues_when_bridge_unreadable(minimal_yml, mutated):
     console = Console(record=True)
     _check_host_ports(_Conn("", "failure"), cfg, console)
     assert "continuing" in console.export_text()
+
+
+# ─── Flat VLAN 1 must reach the router itself ───────────────────────────────
+
+def test_flat_row_leaves_the_cpu_untagged(cfg):
+    # The flat address is untagged on the bridge interface. tagged=bridge on
+    # VLAN 1 hands the CPU tagged frames instead, and with filtering on the
+    # router stops answering on ether3-5 (CHR 7.24.2: no ARP reply).
+    text = _vlans(cfg)
+    flat = text[text.index("vlan-ids=1 "):text.index('comment="lankit:vlan:legacy:flat"')]
+    assert "tagged=bridge" not in flat
+    start = text.rindex("add bridge=bridge", 0, text.index("vlan-ids=1 "))
+    assert "tagged=" not in text[start:text.index("vlan-ids=1 ")].replace("untagged=", "")

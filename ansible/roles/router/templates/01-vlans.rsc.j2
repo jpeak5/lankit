@@ -50,10 +50,16 @@ add bridge=bridge \
 # LAN ports with no host wired to them stay on PVID 1 for unassigned wired
 # devices. Host ports (hosts.<name>.port; dns_server defaults to
 # lan_interface) get their segment's PVID below instead.
+#
+# No tagged=bridge here. The router's flat address (defconf 192.168.88.1)
+# sits untagged on the bridge interface, and the bridge's own PVID 1 makes
+# RouterOS add it as a dynamic *untagged* member of VLAN 1. Listing it as
+# tagged overrides that: VLAN 1 frames reach the CPU tagged, the untagged
+# address never sees them, and once filtering is on, ether3-5 lose the
+# router (no ARP, no DHCP, no SSH). CHR 7.24.2, verified both ways.
 /interface bridge vlan
 add bridge=bridge \
     vlan-ids=1 \
-    tagged=bridge \
 {% if flat_ports %}
     untagged={{ flat_ports | join(',') }} \
 {% endif %}
